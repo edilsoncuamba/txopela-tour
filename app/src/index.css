@@ -1,0 +1,337 @@
+@import url('https://fonts.googleapis.com/css2?family=Pacifico&family=Nunito:wght@400;500;600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Inter:ital,opsz,wght@0,14..32,300..900;1,14..32,300..900&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    /* Premium Color Palette - Txopela Tour */
+    --ocean: 199 100% 36%;
+    --ocean-light: 199 80% 50%;
+    --ocean-dark: 199 100% 25%;
+    
+    --tropical: 158 40% 30%;
+    --tropical-light: 158 40% 40%;
+    
+    --sand: 43 50% 96%;
+    --sand-dark: 43 30% 90%;
+    
+    --sunset: 28 85% 67%;
+    --sunset-light: 28 85% 75%;
+    
+    --deep: 210 50% 23%;
+    
+    /* Shadcn Variables */
+    --background: 0 0% 100%;
+    --foreground: 210 50% 15%;
+    --card: 0 0% 100%;
+    --card-foreground: 210 50% 15%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 210 50% 15%;
+    --primary: 199 100% 36%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 43 50% 96%;
+    --secondary-foreground: 210 50% 15%;
+    --muted: 210 20% 96%;
+    --muted-foreground: 210 20% 50%;
+    --accent: 28 85% 67%;
+    --accent-foreground: 210 50% 15%;
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 210 20% 92%;
+    --input: 210 20% 92%;
+    --ring: 199 100% 36%;
+    --radius: 1rem;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  
+  html {
+    scroll-behavior: smooth;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    width: 100%;
+    height: 100%;
+  }
+  
+  body {
+    @apply bg-background text-foreground;
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+    overflow-x: hidden;
+    width: 100%;
+    height: 100%;
+    margin: 0;
+    padding: 0;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11';
+  }
+  
+  h1, h2, h3, h4, h5, h6 {
+    font-family: 'Plus Jakarta Sans', sans-serif;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+  }
+}
+
+@layer components {
+  /* Premium Card Styles */
+  .card-premium {
+    @apply bg-white rounded-3xl;
+    box-shadow: 
+      0 1px 2px rgba(0, 119, 182, 0.02),
+      0 4px 8px rgba(0, 119, 182, 0.03),
+      0 8px 16px rgba(0, 119, 182, 0.03),
+      0 16px 32px rgba(0, 119, 182, 0.02);
+  }
+  
+  .card-hover {
+    @apply transition-all duration-300 ease-out;
+  }
+  
+  .card-hover:hover {
+    transform: translateY(-2px);
+    box-shadow: 
+      0 4px 8px rgba(0, 119, 182, 0.04),
+      0 8px 16px rgba(0, 119, 182, 0.04),
+      0 16px 32px rgba(0, 119, 182, 0.03),
+      0 32px 64px rgba(0, 119, 182, 0.02);
+  }
+  
+  /* Premium Button Styles */
+  .btn-primary {
+    @apply relative overflow-hidden bg-[#0077B6] text-white font-semibold px-6 py-4 rounded-2xl;
+    box-shadow: 
+      0 2px 4px rgba(0, 119, 182, 0.2),
+      0 4px 8px rgba(0, 119, 182, 0.15),
+      0 8px 16px rgba(0, 119, 182, 0.1),
+      inset 0 1px 0 rgba(255, 255, 255, 0.2);
+  }
+  
+  .btn-primary::before {
+    content: '';
+    @apply absolute inset-0 bg-gradient-to-r from-transparent via-white/10 to-transparent;
+    transform: translateX(-100%);
+    transition: transform 0.6s ease;
+  }
+  
+  .btn-primary:hover::before {
+    transform: translateX(100%);
+  }
+  
+  /* Premium Input Styles */
+  .input-premium {
+    @apply w-full px-5 py-4 bg-gray-50 border-2 border-gray-100 rounded-2xl text-gray-900 placeholder:text-gray-400;
+    transition: all 0.2s ease;
+  }
+  
+  .input-premium:focus {
+    @apply bg-white border-[#0077B6] outline-none;
+    box-shadow: 0 0 0 4px rgba(0, 119, 182, 0.1);
+  }
+  
+  /* Gradient Text */
+  .gradient-text {
+    @apply bg-clip-text text-transparent;
+    background-image: linear-gradient(135deg, #0077B6 0%, #2D6A4F 100%);
+  }
+  
+  /* Glass Effect */
+  .glass {
+    @apply bg-white/80 backdrop-blur-xl;
+    border: 1px solid rgba(255, 255, 255, 0.3);
+  }
+  
+  /* Premium Badge */
+  .badge-premium {
+    @apply inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold;
+  }
+  
+  /* Bottom Navigation Premium */
+  .bottom-nav-item {
+    @apply relative flex flex-col items-center gap-1 p-2 transition-all duration-200;
+  }
+  
+  .bottom-nav-item.active {
+    @apply text-[#0077B6];
+  }
+  
+  .bottom-nav-item.active::before {
+    content: '';
+    @apply absolute -top-1 left-1/2 -translate-x-1/2 w-8 h-1 bg-[#0077B6] rounded-full;
+  }
+}
+
+@layer utilities {
+  /* Hide scrollbar */
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;
+  }
+  .scrollbar-hide {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+  
+  /* Line clamp */
+  .line-clamp-1 {
+    display: -webkit-box;
+    -webkit-line-clamp: 1;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+  
+  .line-clamp-2 {
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+  
+  .line-clamp-3 {
+    display: -webkit-box;
+    -webkit-line-clamp: 3;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+  
+  /* Animations */
+  @keyframes float {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(-10px); }
+  }
+  
+  .animate-float {
+    animation: float 3s ease-in-out infinite;
+  }
+  
+  @keyframes shimmer {
+    0% { background-position: -200% 0; }
+    100% { background-position: 200% 0; }
+  }
+  
+  .animate-shimmer {
+    background: linear-gradient(90deg, transparent, rgba(255,255,255,0.4), transparent);
+    background-size: 200% 100%;
+    animation: shimmer 2s infinite;
+  }
+  
+  @keyframes pulse-glow {
+    0%, 100% { box-shadow: 0 0 20px rgba(0, 119, 182, 0.3); }
+    50% { box-shadow: 0 0 40px rgba(0, 119, 182, 0.5); }
+  }
+  
+  .animate-pulse-glow {
+    animation: pulse-glow 2s ease-in-out infinite;
+  }
+  
+  /* Safe area */
+  .pb-safe {
+    padding-bottom: env(safe-area-inset-bottom, 0);
+  }
+  
+  /* Touch optimization */
+  .touch-manipulation {
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
+  }
+}
+
+/* Leaflet customizations */
+.leaflet-control-zoom {
+  display: none !important;
+}
+
+.custom-marker {
+  background: transparent;
+  border: none;
+}
+
+/* ── RESPONSIVIDADE GLOBAL ─────────────────────────────────────────────────── */
+
+/* Desktop: conteúdo com largura máxima centrada */
+@media (min-width: 768px) {
+  /* Hero maior no desktop */
+  .home-hero {
+    height: 220px !important;
+  }
+
+  /* Descobertas: scroll horizontal vira grid no desktop */
+  .discoveries-scroll {
+    display: grid !important;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)) !important;
+    overflow-x: visible !important;
+    padding-bottom: 0 !important;
+  }
+  .discoveries-scroll > * {
+    flex-shrink: unset !important;
+    width: auto !important;
+  }
+
+  /* Províncias: scroll horizontal vira grid no desktop */
+  .provincias-scroll {
+    display: grid !important;
+    grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)) !important;
+    overflow-x: visible !important;
+  }
+  .provincias-scroll > * {
+    flex-shrink: unset !important;
+    width: auto !important;
+    height: 90px !important;
+  }
+
+  /* Serviços: scroll horizontal vira grid no desktop */
+  .services-scroll {
+    display: grid !important;
+    grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)) !important;
+    overflow-x: visible !important;
+  }
+  .services-scroll > * {
+    flex-shrink: unset !important;
+    width: auto !important;
+  }
+
+  /* Categorias: wrap no desktop */
+  .categories-scroll {
+    flex-wrap: wrap !important;
+    overflow-x: visible !important;
+  }
+
+  /* Padding lateral maior no desktop */
+  .home-section-px {
+    padding-left: 2rem !important;
+    padding-right: 2rem !important;
+  }
+
+  /* Mapa: altura total da viewport */
+  .map-container {
+    height: 100vh !important;
+  }
+}
+
+/* Tablet */
+@media (min-width: 768px) and (max-width: 1023px) {
+  .discoveries-scroll {
+    grid-template-columns: repeat(3, 1fr) !important;
+  }
+  .provincias-scroll {
+    grid-template-columns: repeat(5, 1fr) !important;
+  }
+}
+
+/* Large desktop */
+@media (min-width: 1280px) {
+  .discoveries-scroll {
+    grid-template-columns: repeat(4, 1fr) !important;
+  }
+  .provincias-scroll {
+    grid-template-columns: repeat(6, 1fr) !important;
+  }
+  .services-scroll {
+    grid-template-columns: repeat(5, 1fr) !important;
+  }
+}

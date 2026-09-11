@@ -1,0 +1,126 @@
+{
+  "id": "culture-inhambane-001",
+  "province": "inhambane",
+  "title": "Cultura de Inhambane",
+  "description": "Inhambane é conhecida pela sua rica herança cultural, com forte influência das comunidades Tsonga e Chope, famosas pela música e dança tradicionais.",
+  "sections": {
+    "traditions": {
+      "title": "Tradições e Costumes",
+      "description": "As tradições de Inhambane refletem a ligação profunda com o oceano e a terra.",
+      "items": [
+        {
+          "id": "trad-inhambane-001",
+          "name": "Pesca Tradicional",
+          "description": "Métodos ancestrais de pesca transmitidos de geração em geração, utilizando canoas tradicionais e redes artesanais.",
+          "significance": "Representa a sustentabilidade e o respeito pelo oceano, fundamentais para a sobrevivência das comunidades costeiras.",
+          "images": ["/images/culture/inhambane/pesca-1.jpg", "/images/culture/inhambane/pesca-2.jpg"]
+        },
+        {
+          "id": "trad-inhambane-002",
+          "name": "Construção de Canoas",
+          "description": "Arte tradicional de construir canoas a partir de troncos de árvores, técnica passada através de gerações.",
+          "significance": "Símbolo da engenhosidade e adaptação das comunidades costeiras.",
+          "images": ["/images/culture/inhambane/canoas-1.jpg"]
+        }
+      ]
+    },
+    "dances": {
+      "title": "Danças Tradicionais",
+      "description": "Inhambane é o berço da Timbila, reconhecida pela UNESCO como Património Imaterial da Humanidade.",
+      "dances": [
+        {
+          "id": "dance-inhambane-001",
+          "name": "Timbila",
+          "description": "Dança acompanhada por xilofones tradicionais de madeira, executada pelo povo Chope. Reconhecida pela UNESCO como Património Imaterial da Humanidade.",
+          "origin": "Tradição milenar do povo Chope",
+          "occasions": ["Cerimónias tradicionais", "Festivais culturais", "Celebrações comunitárias"],
+          "videoUrl": "/videos/culture/inhambane/timbila.mp4",
+          "images": ["/images/culture/inhambane/timbila-1.jpg", "/images/culture/inhambane/timbila-2.jpg"]
+        },
+        {
+          "id": "dance-inhambane-002",
+          "name": "Makwaela",
+          "description": "Dança de grupo com cânticos harmoniosos, tradicionalmente executada por mineiros.",
+          "origin": "Comunidades de trabalhadores migrantes",
+          "occasions": ["Festivais", "Reuniões comunitárias"],
+          "images": ["/images/culture/inhambane/makwaela-1.jpg"]
+        }
+      ]
+    },
+    "gastronomy": {
+      "title": "Gastronomia Típica",
+      "description": "A culinária de Inhambane é dominada por frutos do mar frescos e sabores intensos.",
+      "dishes": [
+        {
+          "id": "dish-inhambane-001",
+          "name": "Lagosta Grelhada",
+          "description": "Lagosta fresca grelhada com manteiga de alho e limão, especialidade das praias de Inhambane.",
+          "ingredients": ["Lagosta", "Manteiga", "Alho", "Limão", "Piri-piri"],
+          "preparation": "A lagosta é grelhada na brasa e regada com manteiga de alho e limão.",
+          "images": ["/images/culture/inhambane/lagosta-1.jpg", "/images/culture/inhambane/lagosta-2.jpg"],
+          "relatedServices": ["service-inhambane-rest-001"]
+        },
+        {
+          "id": "dish-inhambane-002",
+          "name": "Peixe à Zambeziana",
+          "description": "Peixe fresco marinado em molho picante e grelhado, servido com arroz de coco.",
+          "ingredients": ["Peixe", "Piri-piri", "Limão", "Alho", "Coco"],
+          "images": ["/images/culture/inhambane/peixe-zambeziana-1.jpg"]
+        }
+      ]
+    },
+    "events": {
+      "title": "Eventos Culturais",
+      "description": "Inhambane celebra a sua rica herança cultural através de diversos festivais.",
+      "events": [
+        {
+          "id": "event-inhambane-001",
+          "name": "Festival da Timbila",
+          "description": "Festival anual que celebra a música e dança Timbila, Património da UNESCO.",
+          "date": "Setembro",
+          "frequency": "annual",
+          "location": "Zavala, Inhambane",
+          "images": ["/images/culture/inhambane/festival-timbila-1.jpg"]
+        },
+        {
+          "id": "event-inhambane-002",
+          "name": "Festival do Camarão",
+          "description": "Celebração gastronómica dedicada ao camarão e outros frutos do mar da região.",
+          "date": "Julho",
+          "frequency": "annual",
+          "location": "Inhambane",
+          "images": ["/images/culture/inhambane/festival-camarao-1.jpg"]
+        }
+      ]
+    }
+  },
+  "media": {
+    "photos": [
+      {
+        "id": "photo-inhambane-001",
+        "url": "/images/culture/inhambane/praia-tofo-1.jpg",
+        "type": "image",
+        "caption": "Praia do Tofo ao pôr do sol",
+        "credit": "Txopela Tour"
+      },
+      {
+        "id": "photo-inhambane-002",
+        "url": "/images/culture/inhambane/pescadores-1.jpg",
+        "type": "image",
+        "caption": "Pescadores tradicionais",
+        "credit": "Txopela Tour"
+      }
+    ],
+    "videos": [
+      {
+        "id": "video-inhambane-001",
+        "url": "/videos/culture/inhambane/intro.mp4",
+        "type": "video",
+        "caption": "Cultura de Inhambane",
+        "thumbnail": "/images/culture/inhambane/video-thumb-1.jpg"
+      }
+    ]
+  },
+  "createdAt": "2024-01-15T10:00:00Z",
+  "updatedAt": "2024-01-15T10:00:00Z"
+}

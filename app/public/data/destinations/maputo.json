@@ -1,0 +1,202 @@
+[
+  {
+    "id": "dest-maputo-001",
+    "name": "Ilha de Inhaca",
+    "type": "beach",
+    "province": "maputo",
+    "district": "Matutuíne",
+    "location": {
+      "lat": -26.0167,
+      "lng": 32.9333,
+      "address": "Ilha de Inhaca, Matutuíne, Maputo"
+    },
+    "summary": "Paraíso tropical com praias pristinas, recifes de coral e vida marinha abundante.",
+    "description": "A Ilha de Inhaca é um destino paradisíaco localizado na Baía de Maputo, conhecida pelas suas praias de areia branca, águas cristalinas e rica biodiversidade marinha. A ilha oferece excelentes oportunidades para mergulho, snorkeling e observação de aves.\n\nCom uma área de aproximadamente 52 km², a ilha abriga comunidades pesqueiras tradicionais que mantêm vivas as suas culturas e tradições. Os visitantes podem explorar o farol histórico, visitar o museu marinho e desfrutar da gastronomia local baseada em frutos do mar frescos.\n\nA ilha é também um importante centro de pesquisa marinha, com uma estação biológica que estuda os ecossistemas costeiros e marinhos da região.",
+    "highlights": [
+      "Praias de areia branca e águas cristalinas",
+      "Mergulho e snorkeling em recifes de coral",
+      "Farol histórico com vista panorâmica",
+      "Museu Marinho",
+      "Observação de aves migratórias",
+      "Gastronomia local de frutos do mar"
+    ],
+    "photos": [
+      {
+        "id": "photo-dest-maputo-001-1",
+        "url": "/images/destinations/maputo/inhaca-beach-1.jpg",
+        "type": "image",
+        "caption": "Praia principal da Ilha de Inhaca"
+      },
+      {
+        "id": "photo-dest-maputo-001-2",
+        "url": "/images/destinations/maputo/inhaca-lighthouse-1.jpg",
+        "type": "image",
+        "caption": "Farol histórico da Ilha de Inhaca"
+      },
+      {
+        "id": "photo-dest-maputo-001-3",
+        "url": "/images/destinations/maputo/inhaca-coral-1.jpg",
+        "type": "image",
+        "caption": "Recifes de coral"
+      }
+    ],
+    "directions": {
+      "byRoad": "Não há acesso rodoviário direto. É necessário utilizar transporte marítimo.",
+      "byPublicTransport": "Barcos regulares partem do Cais da Maxaquene em Maputo. Viagem de aproximadamente 2 horas.",
+      "byAir": "Voos charter disponíveis do Aeroporto Internacional de Maputo.",
+      "notes": "Recomenda-se verificar horários de barcos com antecedência, especialmente durante a época de chuvas."
+    },
+    "accessibility": {
+      "wheelchairAccessible": false,
+      "notes": "Terreno arenoso e irregular dificulta o acesso para cadeiras de rodas. Algumas áreas da ilha são mais acessíveis que outras."
+    },
+    "facilities": ["Alojamento", "Restaurantes", "Mergulho", "Snorkeling", "Museu"],
+    "bestTimeToVisit": "Abril a Novembro (época seca)",
+    "entryFee": {
+      "local": 50,
+      "foreign": 100,
+      "currency": "MZN"
+    },
+    "contacts": {
+      "phone": "+258 21 490 011",
+      "email": "info@inhacaisland.co.mz"
+    },
+    "relatedStories": ["story-maputo-001"],
+    "relatedServices": ["service-maputo-hotel-001"],
+    "rating": 4.7,
+    "reviewsCount": 342,
+    "createdAt": "2024-01-15T10:00:00Z",
+    "updatedAt": "2024-01-15T10:00:00Z"
+  },
+  {
+    "id": "dest-maputo-002",
+    "name": "Fortaleza de Maputo",
+    "type": "historical-site",
+    "province": "maputo",
+    "district": "Maputo",
+    "location": {
+      "lat": -25.9692,
+      "lng": 32.5892,
+      "address": "Praça 25 de Junho, Maputo"
+    },
+    "summary": "Fortaleza histórica do século XVIII, símbolo da história de Maputo.",
+    "description": "A Fortaleza de Nossa Senhora da Conceição, construída em 1787, é um dos monumentos históricos mais importantes de Maputo. Localizada estrategicamente na Baía de Maputo, a fortaleza serviu como ponto de defesa e centro administrativo durante séculos.\n\nAtualmente, a fortaleza abriga o Museu Militar, onde os visitantes podem explorar exposições sobre a história militar de Moçambique, incluindo artefactos da era colonial e da luta pela independência. As muralhas da fortaleza oferecem vistas espetaculares da baía e do porto de Maputo.\n\nA arquitetura da fortaleza é um exemplo notável do estilo militar português do século XVIII, com suas paredes grossas de pedra e coral, bastiões estrategicamente posicionados e um fosso defensivo.",
+    "highlights": [
+      "Arquitetura militar do século XVIII",
+      "Museu Militar com exposições históricas",
+      "Vistas panorâmicas da Baía de Maputo",
+      "Canhões históricos",
+      "Jardins bem conservados"
+    ],
+    "photos": [
+      {
+        "id": "photo-dest-maputo-002-1",
+        "url": "/images/destinations/maputo/fortaleza-exterior-1.jpg",
+        "type": "image",
+        "caption": "Vista exterior da Fortaleza"
+      },
+      {
+        "id": "photo-dest-maputo-002-2",
+        "url": "/images/destinations/maputo/fortaleza-cannons-1.jpg",
+        "type": "image",
+        "caption": "Canhões históricos"
+      }
+    ],
+    "directions": {
+      "byRoad": "Localizada no centro de Maputo, acessível pela Avenida Marginal.",
+      "byPublicTransport": "Várias linhas de autocarro param próximo à Praça 25 de Junho. Táxis e aplicativos de transporte disponíveis.",
+      "parking": "Estacionamento público disponível nas proximidades.",
+      "notes": "Fácil acesso a pé a partir do centro da cidade."
+    },
+    "accessibility": {
+      "wheelchairAccessible": true,
+      "notes": "Rampa de acesso disponível na entrada principal. Algumas áreas do museu podem ter acesso limitado."
+    },
+    "facilities": ["Museu", "Loja de souvenirs", "Guias turísticos", "Sanitários"],
+    "bestTimeToVisit": "Todo o ano. Evitar dias de chuva intensa.",
+    "entryFee": {
+      "local": 20,
+      "foreign": 50,
+      "currency": "MZN"
+    },
+    "openingHours": {
+      "weekdays": "09:00 - 17:00",
+      "weekends": "09:00 - 13:00",
+      "notes": "Fechado às segundas-feiras e feriados nacionais"
+    },
+    "contacts": {
+      "phone": "+258 21 430 794",
+      "email": "museu.militar@gov.mz"
+    },
+    "relatedStories": ["story-maputo-002"],
+    "rating": 4.5,
+    "reviewsCount": 567,
+    "createdAt": "2024-01-15T10:00:00Z",
+    "updatedAt": "2024-01-15T10:00:00Z"
+  },
+  {
+    "id": "dest-maputo-003",
+    "name": "Reserva Especial de Maputo",
+    "type": "natural-reserve",
+    "province": "maputo",
+    "district": "Matutuíne",
+    "location": {
+      "lat": -26.3500,
+      "lng": 32.7833,
+      "address": "Matutuíne, Maputo"
+    },
+    "summary": "Reserva natural com elefantes, rinocerontes e paisagens costeiras deslumbrantes.",
+    "description": "A Reserva Especial de Maputo, anteriormente conhecida como Reserva dos Elefantes, é uma área protegida de 1,040 km² localizada no extremo sul de Moçambique. A reserva é lar de uma população crescente de elefantes, além de outras espécies como rinocerontes, hipopótamos, crocodilos e uma variedade de antílopes.\n\nA reserva combina ecossistemas terrestres e marinhos, incluindo praias pristinas, dunas costeiras, florestas de mangal e lagos. É um destino ideal para safaris, observação de aves e ecoturismo.\n\nEsforços de conservação têm sido bem-sucedidos em aumentar as populações de vida selvagem, tornando a reserva um exemplo de gestão sustentável de recursos naturais em Moçambique.",
+    "highlights": [
+      "Safaris para observação de elefantes",
+      "Praias virgens e dunas costeiras",
+      "Observação de aves (mais de 300 espécies)",
+      "Lagos e florestas de mangal",
+      "Pesca desportiva",
+      "Acampamento selvagem"
+    ],
+    "photos": [
+      {
+        "id": "photo-dest-maputo-003-1",
+        "url": "/images/destinations/maputo/reserva-elephants-1.jpg",
+        "type": "image",
+        "caption": "Elefantes na Reserva de Maputo"
+      },
+      {
+        "id": "photo-dest-maputo-003-2",
+        "url": "/images/destinations/maputo/reserva-beach-1.jpg",
+        "type": "image",
+        "caption": "Praia dentro da reserva"
+      }
+    ],
+    "directions": {
+      "byRoad": "Aproximadamente 120 km ao sul de Maputo pela EN1. Estrada em boas condições até Ponta do Ouro, depois estrada de terra até a reserva.",
+      "byPublicTransport": "Chapas (mini-autocarros) disponíveis de Maputo para Ponta do Ouro. De lá, é necessário transporte 4x4.",
+      "notes": "Veículo 4x4 recomendado para acesso à reserva. Guia local aconselhado."
+    },
+    "accessibility": {
+      "wheelchairAccessible": false,
+      "notes": "Terreno irregular e arenoso. Não adequado para cadeiras de rodas."
+    },
+    "facilities": ["Acampamento", "Alojamento básico", "Guias", "Safaris"],
+    "bestTimeToVisit": "Maio a Outubro (época seca, melhor para observação de animais)",
+    "entryFee": {
+      "local": 100,
+      "foreign": 300,
+      "currency": "MZN"
+    },
+    "openingHours": {
+      "weekdays": "06:00 - 18:00",
+      "weekends": "06:00 - 18:00",
+      "notes": "Entrada permitida apenas durante o dia"
+    },
+    "contacts": {
+      "phone": "+258 82 305 7890",
+      "email": "reserva.maputo@anac.gov.mz"
+    },
+    "rating": 4.8,
+    "reviewsCount": 234,
+    "createdAt": "2024-01-15T10:00:00Z",
+    "updatedAt": "2024-01-15T10:00:00Z"
+  }
+]

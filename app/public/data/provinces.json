@@ -1,0 +1,112 @@
+[
+  {
+    "id": "maputo",
+    "name": "Maputo",
+    "capital": "Matola",
+    "districts": ["Boane", "Magude", "Manhiça", "Marracuene", "Matola", "Matutuíne", "Moamba", "Namaacha"],
+    "coordinates": {
+      "lat": -25.9655,
+      "lng": 32.5832
+    }
+  },
+  {
+    "id": "gaza",
+    "name": "Gaza",
+    "capital": "Xai-Xai",
+    "districts": ["Bilene", "Chibuto", "Chicualacuala", "Chigubo", "Chókwè", "Guijá", "Limpopo", "Mabalane", "Manjacaze", "Massangena", "Massingir", "Xai-Xai"],
+    "coordinates": {
+      "lat": -24.0444,
+      "lng": 33.6444
+    }
+  },
+  {
+    "id": "inhambane",
+    "name": "Inhambane",
+    "capital": "Inhambane",
+    "districts": ["Funhalouro", "Govuro", "Homoíne", "Inhambane", "Inharrime", "Inhassoro", "Jangamo", "Mabote", "Massinga", "Morrumbene", "Panda", "Vilankulo", "Zavala"],
+    "coordinates": {
+      "lat": -23.8650,
+      "lng": 35.3833
+    }
+  },
+  {
+    "id": "sofala",
+    "name": "Sofala",
+    "capital": "Beira",
+    "districts": ["Beira", "Búzi", "Caia", "Chemba", "Cheringoma", "Chibabava", "Dondo", "Gorongosa", "Machanga", "Maríngue", "Marromeu", "Muanza", "Nhamatanda"],
+    "coordinates": {
+      "lat": -19.8436,
+      "lng": 34.8389
+    }
+  },
+  {
+    "id": "manica",
+    "name": "Manica",
+    "capital": "Chimoio",
+    "districts": ["Báruè", "Chimoio", "Gondola", "Guro", "Macate", "Machaze", "Macossa", "Manica", "Mossurize", "Sussundenga", "Tambara", "Vanduzi"],
+    "coordinates": {
+      "lat": -19.1164,
+      "lng": 33.4833
+    }
+  },
+  {
+    "id": "tete",
+    "name": "Tete",
+    "capital": "Tete",
+    "districts": ["Angónia", "Cahora-Bassa", "Changara", "Chifunde", "Chiuta", "Dôa", "Macanga", "Magoé", "Marara", "Marávia", "Moatize", "Mutarara", "Tete", "Tsangano", "Zumbo"],
+    "coordinates": {
+      "lat": -16.1564,
+      "lng": 33.5867
+    }
+  },
+  {
+    "id": "zambezia",
+    "name": "Zambézia",
+    "capital": "Quelimane",
+    "districts": ["Alto Molócuè", "Chinde", "Derre", "Gilé", "Gurúè", "Ile", "Inhassunge", "Lugela", "Maganja da Costa", "Milange", "Mocuba", "Mocubela", "Molumbo", "Mopeia", "Morrumbala", "Namacurra", "Namarroi", "Nicoadala", "Pebane", "Quelimane"],
+    "coordinates": {
+      "lat": -17.8786,
+      "lng": 36.8883
+    }
+  },
+  {
+    "id": "nampula",
+    "name": "Nampula",
+    "capital": "Nampula",
+    "districts": ["Angoche", "Eráti", "Ilha de Moçambique", "Lalaua", "Larde", "Liúpo", "Malema", "Meconta", "Mecubúri", "Memba", "Mogincual", "Mogovolas", "Moma", "Monapo", "Mossuril", "Muecate", "Murrupula", "Nacala-a-Velha", "Nacala Porto", "Nacarôa", "Nampula", "Rapale", "Ribaué"],
+    "coordinates": {
+      "lat": -15.1165,
+      "lng": 39.2666
+    }
+  },
+  {
+    "id": "niassa",
+    "name": "Niassa",
+    "capital": "Lichinga",
+    "districts": ["Chimbonila", "Cuamba", "Lago", "Lichinga", "Majune", "Mandimba", "Marrupa", "Maúa", "Mavago", "Mecanhelas", "Meculane", "Metarica", "Muembe", "N'gauma", "Nipepe", "Sanga"],
+    "coordinates": {
+      "lat": -13.3128,
+      "lng": 35.2406
+    }
+  },
+  {
+    "id": "cabo-delgado",
+    "name": "Cabo Delgado",
+    "capital": "Pemba",
+    "districts": ["Ancuabe", "Balama", "Chiúre", "Ibo", "Macomia", "Mecúfi", "Meluco", "Metuge", "Mocímboa da Praia", "Montepuez", "Mueda", "Muidumbe", "Namuno", "Nangade", "Palma", "Pemba", "Quissanga"],
+    "coordinates": {
+      "lat": -12.9740,
+      "lng": 40.5178
+    }
+  },
+  {
+    "id": "maputo-cidade",
+    "name": "Maputo Cidade",
+    "capital": "Maputo",
+    "districts": ["KaMpfumo", "Nlhamankulu", "KaMaxakeni", "KaMubukwana", "KaMavota", "KaTembe", "KaNyaka"],
+    "coordinates": {
+      "lat": -25.9692,
+      "lng": 32.5732
+    }
+  }
+]

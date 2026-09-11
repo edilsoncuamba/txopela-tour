@@ -1,0 +1,144 @@
+{
+  "id": "culture-maputo-001",
+  "province": "maputo",
+  "title": "Cultura de Maputo",
+  "description": "A província de Maputo é rica em tradições culturais que refletem a diversidade étnica da região, com influências Ronga, Tsonga e outras comunidades locais.",
+  "sections": {
+    "traditions": {
+      "title": "Tradições e Costumes",
+      "description": "As tradições de Maputo são profundamente enraizadas nas práticas ancestrais das comunidades Ronga.",
+      "items": [
+        {
+          "id": "trad-maputo-001",
+          "name": "Lobolo",
+          "description": "Cerimónia tradicional de casamento onde a família do noivo oferece presentes à família da noiva como símbolo de respeito e união entre as famílias.",
+          "significance": "Representa a união não apenas entre dois indivíduos, mas entre duas famílias e comunidades inteiras.",
+          "images": ["/images/culture/maputo/lobolo-1.jpg", "/images/culture/maputo/lobolo-2.jpg"],
+          "relatedStories": ["story-maputo-001"]
+        },
+        {
+          "id": "trad-maputo-002",
+          "name": "Cerimónia de Iniciação",
+          "description": "Ritual de passagem para a vida adulta, onde os jovens aprendem sobre responsabilidades, história e valores da comunidade.",
+          "significance": "Marca a transição da juventude para a idade adulta e transmite conhecimentos ancestrais.",
+          "images": ["/images/culture/maputo/iniciacao-1.jpg"],
+          "relatedStories": []
+        }
+      ]
+    },
+    "dances": {
+      "title": "Danças Tradicionais",
+      "description": "As danças de Maputo são expressões vibrantes da identidade cultural local.",
+      "dances": [
+        {
+          "id": "dance-maputo-001",
+          "name": "Marrabenta",
+          "description": "Dança e género musical urbano nascido em Maputo, caracterizado por ritmos acelerados e movimentos enérgicos.",
+          "origin": "Surgiu nos subúrbios de Maputo na década de 1950",
+          "occasions": ["Festas", "Celebrações", "Eventos sociais"],
+          "videoUrl": "/videos/culture/maputo/marrabenta.mp4",
+          "images": ["/images/culture/maputo/marrabenta-1.jpg", "/images/culture/maputo/marrabenta-2.jpg"]
+        },
+        {
+          "id": "dance-maputo-002",
+          "name": "Xigubo",
+          "description": "Dança guerreira tradicional executada por homens, com movimentos vigorosos e coordenados.",
+          "origin": "Tradição ancestral das comunidades Tsonga",
+          "occasions": ["Cerimónias tradicionais", "Celebrações importantes"],
+          "images": ["/images/culture/maputo/xigubo-1.jpg"]
+        }
+      ]
+    },
+    "gastronomy": {
+      "title": "Gastronomia Típica",
+      "description": "A culinária de Maputo combina sabores tradicionais com influências costeiras.",
+      "dishes": [
+        {
+          "id": "dish-maputo-001",
+          "name": "Matapa",
+          "description": "Prato tradicional feito com folhas de mandioca moídas, amendoim e camarão, cozinhado em leite de coco.",
+          "ingredients": ["Folhas de mandioca", "Amendoim", "Camarão", "Leite de coco", "Alho", "Cebola"],
+          "preparation": "As folhas são moídas e cozinhadas lentamente com amendoim torrado e camarão, adicionando leite de coco no final.",
+          "images": ["/images/culture/maputo/matapa-1.jpg", "/images/culture/maputo/matapa-2.jpg"],
+          "relatedServices": ["service-maputo-rest-001"]
+        },
+        {
+          "id": "dish-maputo-002",
+          "name": "Caril de Caranguejo",
+          "description": "Caranguejos frescos cozinhados em molho de caril aromático, especialidade da região costeira.",
+          "ingredients": ["Caranguejo", "Leite de coco", "Caril", "Tomate", "Cebola", "Piri-piri"],
+          "images": ["/images/culture/maputo/caril-caranguejo-1.jpg"],
+          "relatedServices": ["service-maputo-rest-001", "service-maputo-rest-002"]
+        },
+        {
+          "id": "dish-maputo-003",
+          "name": "Xima com Molho",
+          "description": "Prato base da alimentação moçambicana, feito de farinha de milho acompanhado de diversos molhos.",
+          "ingredients": ["Farinha de milho", "Água", "Sal"],
+          "preparation": "A farinha é cozida com água até formar uma massa consistente, servida com molho de peixe, carne ou vegetais.",
+          "images": ["/images/culture/maputo/xima-1.jpg"]
+        }
+      ]
+    },
+    "events": {
+      "title": "Eventos Culturais",
+      "description": "Maputo celebra diversos eventos que mantêm vivas as tradições culturais.",
+      "events": [
+        {
+          "id": "event-maputo-001",
+          "name": "Festival Azgo",
+          "description": "Festival anual de música e cultura que celebra a diversidade artística moçambicana.",
+          "date": "Agosto",
+          "frequency": "annual",
+          "location": "Maputo",
+          "images": ["/images/culture/maputo/azgo-1.jpg", "/images/culture/maputo/azgo-2.jpg"]
+        },
+        {
+          "id": "event-maputo-002",
+          "name": "Dia da Cidade de Maputo",
+          "description": "Celebração anual que marca o aniversário da cidade com desfiles, música e atividades culturais.",
+          "date": "10 de Novembro",
+          "frequency": "annual",
+          "location": "Centro de Maputo",
+          "images": ["/images/culture/maputo/dia-cidade-1.jpg"]
+        }
+      ]
+    }
+  },
+  "media": {
+    "photos": [
+      {
+        "id": "photo-maputo-001",
+        "url": "/images/culture/maputo/panorama-1.jpg",
+        "type": "image",
+        "caption": "Vista panorâmica da Baía de Maputo",
+        "credit": "Txopela Tour"
+      },
+      {
+        "id": "photo-maputo-002",
+        "url": "/images/culture/maputo/mercado-1.jpg",
+        "type": "image",
+        "caption": "Mercado tradicional de Maputo",
+        "credit": "Txopela Tour"
+      },
+      {
+        "id": "photo-maputo-003",
+        "url": "/images/culture/maputo/artesanato-1.jpg",
+        "type": "image",
+        "caption": "Artesanato local",
+        "credit": "Txopela Tour"
+      }
+    ],
+    "videos": [
+      {
+        "id": "video-maputo-001",
+        "url": "/videos/culture/maputo/intro.mp4",
+        "type": "video",
+        "caption": "Introdução à cultura de Maputo",
+        "thumbnail": "/images/culture/maputo/video-thumb-1.jpg"
+      }
+    ]
+  },
+  "createdAt": "2024-01-15T10:00:00Z",
+  "updatedAt": "2024-01-15T10:00:00Z"
+}

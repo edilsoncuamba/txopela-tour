@@ -1,0 +1,235 @@
+[
+  {
+    "id": "service-maputo-hotel-001",
+    "name": "Pestana Inhaca Lodge",
+    "category": "lodge",
+    "province": "maputo",
+    "district": "Matutuíne",
+    "location": {
+      "lat": -26.0200,
+      "lng": 32.9350,
+      "address": "Ilha de Inhaca, Matutuíne, Maputo"
+    },
+    "description": "Lodge de luxo situado na paradisíaca Ilha de Inhaca, oferecendo acomodações confortáveis com vista para o oceano, restaurante gourmet e acesso direto à praia. Ideal para lua de mel, mergulho e relaxamento.",
+    "photos": [
+      {
+        "id": "photo-service-maputo-001-1",
+        "url": "/images/services/maputo/pestana-exterior-1.jpg",
+        "type": "image",
+        "caption": "Vista exterior do Pestana Inhaca Lodge"
+      },
+      {
+        "id": "photo-service-maputo-001-2",
+        "url": "/images/services/maputo/pestana-room-1.jpg",
+        "type": "image",
+        "caption": "Quarto com vista para o mar"
+      }
+    ],
+    "contacts": {
+      "phone": "+258 21 490 011",
+      "email": "inhaca@pestana.com",
+      "website": "https://www.pestana.com/inhaca",
+      "socialMedia": {
+        "facebook": "https://facebook.com/pestanainhaca",
+        "instagram": "https://instagram.com/pestanainhaca"
+      }
+    },
+    "openingHours": {
+      "weekdays": "Check-in: 14:00 | Check-out: 11:00",
+      "weekends": "Check-in: 14:00 | Check-out: 11:00",
+      "notes": "Recepção 24 horas"
+    },
+    "pricing": {
+      "range": "luxury",
+      "currency": "USD",
+      "details": "Quartos a partir de $150 por noite (inclui pequeno-almoço)",
+      "priceFrom": 150,
+      "priceTo": 350
+    },
+    "amenities": [
+      "Wi-Fi gratuito",
+      "Restaurante",
+      "Bar",
+      "Piscina",
+      "Spa",
+      "Centro de mergulho",
+      "Transporte de barco",
+      "Ar condicionado",
+      "Cofre",
+      "Serviço de quartos"
+    ],
+    "languages": ["Português", "Inglês", "Francês"],
+    "rating": 4.6,
+    "reviewsCount": 289,
+    "verified": true,
+    "relatedDestinations": ["dest-maputo-001"],
+    "createdAt": "2024-01-15T10:00:00Z",
+    "updatedAt": "2024-01-15T10:00:00Z"
+  },
+  {
+    "id": "service-maputo-rest-001",
+    "name": "Restaurante Costa do Sol",
+    "category": "restaurant",
+    "province": "maputo",
+    "district": "Maputo",
+    "location": {
+      "lat": -25.9450,
+      "lng": 32.6100,
+      "address": "Avenida Marginal, Costa do Sol, Maputo"
+    },
+    "description": "Restaurante icónico de Maputo, famoso pelos seus pratos de marisco fresco e localização privilegiada à beira-mar. Oferece uma experiência gastronómica autêntica com vista panorâmica para o Oceano Índico.",
+    "photos": [
+      {
+        "id": "photo-service-maputo-rest-001-1",
+        "url": "/images/services/maputo/costa-sol-exterior-1.jpg",
+        "type": "image",
+        "caption": "Vista do Restaurante Costa do Sol"
+      },
+      {
+        "id": "photo-service-maputo-rest-001-2",
+        "url": "/images/services/maputo/costa-sol-food-1.jpg",
+        "type": "image",
+        "caption": "Prato de lagosta grelhada"
+      }
+    ],
+    "contacts": {
+      "phone": "+258 21 485 797",
+      "email": "info@costadosol.co.mz",
+      "website": "https://www.costadosol.co.mz"
+    },
+    "openingHours": {
+      "weekdays": "12:00 - 23:00",
+      "weekends": "12:00 - 00:00",
+      "notes": "Reservas recomendadas aos fins de semana"
+    },
+    "pricing": {
+      "range": "mid-range",
+      "currency": "MZN",
+      "details": "Refeição completa entre 800-1500 MZN por pessoa",
+      "priceFrom": 800,
+      "priceTo": 1500
+    },
+    "amenities": [
+      "Esplanada à beira-mar",
+      "Bar completo",
+      "Música ao vivo (fins de semana)",
+      "Estacionamento",
+      "Wi-Fi",
+      "Aceita cartões"
+    ],
+    "languages": ["Português", "Inglês"],
+    "rating": 4.7,
+    "reviewsCount": 1245,
+    "verified": true,
+    "relatedDestinations": [],
+    "createdAt": "2024-01-15T10:00:00Z",
+    "updatedAt": "2024-01-15T10:00:00Z"
+  },
+  {
+    "id": "service-maputo-guide-001",
+    "name": "Maputo City Tours - João Silva",
+    "category": "tour-guide",
+    "province": "maputo",
+    "district": "Maputo",
+    "location": {
+      "lat": -25.9655,
+      "lng": 32.5832,
+      "address": "Centro de Maputo"
+    },
+    "description": "Guia turístico certificado com 15 anos de experiência, especializado em tours históricos e culturais pela cidade de Maputo. Oferece tours personalizados em português, inglês e francês, incluindo visitas à Fortaleza, mercados tradicionais, museus e bairros históricos.",
+    "photos": [
+      {
+        "id": "photo-service-maputo-guide-001-1",
+        "url": "/images/services/maputo/guide-joao-1.jpg",
+        "type": "image",
+        "caption": "João Silva, guia turístico"
+      }
+    ],
+    "contacts": {
+      "phone": "+258 84 123 4567",
+      "email": "joao.silva@maputotours.co.mz",
+      "socialMedia": {
+        "facebook": "https://facebook.com/maputocitytours"
+      }
+    },
+    "openingHours": {
+      "weekdays": "08:00 - 18:00",
+      "weekends": "08:00 - 18:00",
+      "notes": "Tours disponíveis mediante reserva prévia"
+    },
+    "pricing": {
+      "range": "budget",
+      "currency": "USD",
+      "details": "Tours a partir de $30 por pessoa (mínimo 2 pessoas)",
+      "priceFrom": 30,
+      "priceTo": 100
+    },
+    "amenities": [
+      "Transporte incluído",
+      "Água e snacks",
+      "Guia certificado",
+      "Tours personalizados",
+      "Fotografia incluída"
+    ],
+    "languages": ["Português", "Inglês", "Francês"],
+    "rating": 4.9,
+    "reviewsCount": 187,
+    "verified": true,
+    "relatedDestinations": ["dest-maputo-002"],
+    "createdAt": "2024-01-15T10:00:00Z",
+    "updatedAt": "2024-01-15T10:00:00Z"
+  },
+  {
+    "id": "service-maputo-transport-001",
+    "name": "Maputo Transfer Services",
+    "category": "transport",
+    "province": "maputo",
+    "district": "Maputo",
+    "location": {
+      "lat": -25.9208,
+      "lng": 32.5731,
+      "address": "Aeroporto Internacional de Maputo"
+    },
+    "description": "Serviço de transfer confiável entre o aeroporto e hotéis/destinos em Maputo e arredores. Frota moderna com veículos climatizados, motoristas profissionais e serviço 24 horas.",
+    "photos": [
+      {
+        "id": "photo-service-maputo-transport-001-1",
+        "url": "/images/services/maputo/transfer-vehicle-1.jpg",
+        "type": "image",
+        "caption": "Veículo de transfer"
+      }
+    ],
+    "contacts": {
+      "phone": "+258 82 345 6789",
+      "email": "info@maputotransfer.co.mz",
+      "website": "https://www.maputotransfer.co.mz"
+    },
+    "openingHours": {
+      "weekdays": "24 horas",
+      "weekends": "24 horas",
+      "notes": "Serviço disponível 24/7"
+    },
+    "pricing": {
+      "range": "budget",
+      "currency": "USD",
+      "details": "Transfer aeroporto-cidade a partir de $15",
+      "priceFrom": 15,
+      "priceTo": 50
+    },
+    "amenities": [
+      "Ar condicionado",
+      "Wi-Fi no veículo",
+      "Motorista profissional",
+      "Rastreamento GPS",
+      "Pagamento por cartão",
+      "Reserva online"
+    ],
+    "languages": ["Português", "Inglês"],
+    "rating": 4.5,
+    "reviewsCount": 456,
+    "verified": true,
+    "relatedDestinations": [],
+    "createdAt": "2024-01-15T10:00:00Z",
+    "updatedAt": "2024-01-15T10:00:00Z"
+  }
+]

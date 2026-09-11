@@ -1,0 +1,3504 @@
+openapi: 3.0.3
+info:
+  title: Txopela Tour API
+  version: 1.0.0
+  description: |-
+    API REST da plataforma turística Txopela Tour — Inhambane, Moçambique.
+
+    ## Autenticação
+
+    Esta API utiliza tokens JWT. Após fazer login em `POST /api/auth/login/`, inclua o token no cabeçalho de cada pedido autenticado:
+
+    ```
+    Authorization: Bearer <token>
+    ```
+
+    ## Envelope de Resposta
+
+    Todas as respostas seguem o formato padronizado:
+
+    ```json
+    {
+      "status": "success",
+      "code": 200,
+      "data": { ... },
+      "meta": { "timestamp": "...", "correlation_id": "..." }
+    }
+    ```
+
+    ## Tokens
+
+    O **access token** tem validade de **15 minutos**. Use `POST /api/auth/refresh/` com o `refreshToken` para obter um novo par antes da expiração.
+  contact:
+    name: Txopela Tour
+    email: dev@txopelatour.mz
+  license:
+    name: Proprietary
+paths:
+  /api/admin/approvals/{id}/:
+    put:
+      operationId: admin_approvals_update
+      description: |-
+        Aprova ou rejeita um local ou serviço pendente pelo ID do item.
+
+        O tipo é detectado automaticamente (local → service → post).
+
+        - `action`: `approve` | `reject`
+        - `reason`: motivo (obrigatório para rejeição)
+      summary: Aprovar ou rejeitar item
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - Administração
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ApproveItemRequestRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/ApproveItemRequestRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/ApproveItemRequestRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApproveItemResponse'
+            application/vnd.txopela.v1+json:
+              schema:
+                $ref: '#/components/schemas/ApproveItemResponse'
+          description: ''
+        '400':
+          description: Dados inválidos
+        '403':
+          description: Sem permissão
+        '404':
+          description: Item não encontrado
+  /api/admin/pending-approvals/:
+    get:
+      operationId: admin_pending_approvals_retrieve
+      description: Lista locais, serviços e posts pendentes de aprovação. Requer role
+        admin ou curator.
+      summary: Pendentes de aprovação
+      parameters:
+      - in: query
+        name: limit
+        schema:
+          type: integer
+      - in: query
+        name: page
+        schema:
+          type: integer
+      - in: query
+        name: type
+        schema:
+          type: string
+        description: 'locals|services|posts (default: todos)'
+      tags:
+      - Administração
+      security:
+      - jwtAuth: []
+      - jwtAuth: []
+      responses:
+        '200':
+          description: Lista de itens pendentes
+        '403':
+          description: Sem permissão
+  /api/admin/stats/:
+    get:
+      operationId: admin_stats_retrieve
+      description: Estatísticas gerais da plataforma. Requer role admin ou curator.
+      summary: Relatórios e analytics
+      tags:
+      - Administração
+      security:
+      - jwtAuth: []
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminStatsResponse'
+            application/vnd.txopela.v1+json:
+              schema:
+                $ref: '#/components/schemas/AdminStatsResponse'
+          description: ''
+        '403':
+          description: Sem permissão
+  /api/admin/users/:
+    get:
+      operationId: admin_users_retrieve
+      description: Lista todos os utilizadores com filtros. Requer role admin.
+      summary: Listar utilizadores
+      parameters:
+      - in: query
+        name: limit
+        schema:
+          type: integer
+      - in: query
+        name: page
+        schema:
+          type: integer
+      - in: query
+        name: role
+        schema:
+          type: string
+        description: tourist|guide|business|local_business|curator|admin
+      - in: query
+        name: search
+        schema:
+          type: string
+        description: Pesquisa por nome ou email
+      - in: query
+        name: status
+        schema:
+          type: string
+        description: active|suspended|banned
+      tags:
+      - Administração
+      security:
+      - jwtAuth: []
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminUserListResponse'
+            application/vnd.txopela.v1+json:
+              schema:
+                $ref: '#/components/schemas/AdminUserListResponse'
+          description: ''
+        '403':
+          description: Sem permissão
+  /api/admin/users/{id}/status/:
+    put:
+      operationId: admin_users_status_update
+      description: Activa, suspende ou bane um utilizador. Requer role admin.
+      summary: Atualizar status de utilizador
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - Administração
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UserStatusRequestRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/UserStatusRequestRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/UserStatusRequestRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserStatusResponse'
+            application/vnd.txopela.v1+json:
+              schema:
+                $ref: '#/components/schemas/UserStatusResponse'
+          description: ''
+        '400':
+          description: Dados inválidos
+        '403':
+          description: Sem permissão
+        '404':
+          description: Utilizador não encontrado
+  /api/auth/login/:
+    post:
+      operationId: auth_login_create
+      description: Autentica com email e password. Retorna dados do usuário com stats
+        e tokens JWT.
+      summary: Login de usuário
+      tags:
+      - Autenticação
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      - jwtAuth: []
+      - {}
+      responses:
+        '200':
+          description: Login bem-sucedido
+        '400':
+          description: Credenciais inválidas
+  /api/auth/logout/:
+    post:
+      operationId: auth_logout_create
+      description: 'Invalida o refresh token (blacklist). Requer header Authorization:
+        Bearer {token}.'
+      summary: Logout
+      tags:
+      - Autenticação
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LogoutRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/LogoutRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/LogoutRequest'
+      security:
+      - jwtAuth: []
+      - jwtAuth: []
+      responses:
+        '200':
+          description: Logout realizado com sucesso
+        '400':
+          description: Token inválido
+  /api/auth/me/:
+    get:
+      operationId: auth_me_retrieve
+      description: Retorna ou atualiza o perfil do usuário autenticado.
+      summary: Perfil do usuário autenticado
+      tags:
+      - Autenticação
+      security:
+      - jwtAuth: []
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserProfile'
+            application/vnd.txopela.v1+json:
+              schema:
+                $ref: '#/components/schemas/UserProfile'
+          description: ''
+    put:
+      operationId: auth_me_update
+      description: Retorna ou atualiza o perfil do usuário autenticado.
+      summary: Perfil do usuário autenticado
+      tags:
+      - Autenticação
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UserProfileRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/UserProfileRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/UserProfileRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserProfile'
+            application/vnd.txopela.v1+json:
+              schema:
+                $ref: '#/components/schemas/UserProfile'
+          description: ''
+    patch:
+      operationId: auth_me_partial_update
+      description: Retorna ou atualiza o perfil do usuário autenticado.
+      summary: Perfil do usuário autenticado
+      tags:
+      - Autenticação
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedUserProfileRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedUserProfileRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedUserProfileRequest'
+      security:
+      - jwtAuth: []
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserProfile'
+            application/vnd.txopela.v1+json:
+              schema:
+                $ref: '#/components/schemas/UserProfile'
+          description: ''
+  /api/auth/refresh/:
+    post:
+      operationId: auth_refresh_create
+      description: Renova o access token usando o refreshToken. Retorna um novo par
+        de tokens.
+      summary: Renovar token JWT
+      tags:
+      - Autenticação
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RefreshTokenRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/RefreshTokenRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/RefreshTokenRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      - jwtAuth: []
+      - {}
+      responses:
+        '200':
+          description: Tokens renovados com sucesso
+        '400':
+          description: Refresh token inválido ou expirado
+  /api/auth/register/:
+    post:
+      operationId: auth_register_create
+      description: Cria uma nova conta. Retorna dados do usuário e tokens JWT.
+      summary: Registrar novo usuário
+      tags:
+      - Autenticação
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegisterRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/RegisterRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/RegisterRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      - jwtAuth: []
+      - {}
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RegisterResponse'
+            application/vnd.txopela.v1+json:
+              schema:
+                $ref: '#/components/schemas/RegisterResponse'
+          description: Registrado com sucesso
+        '400':
+          description: Dados inválidos
+  /api/bookings/:
+    get:
+      operationId: bookings_list
+      summary: Listar reservas do utilizador
+      parameters:
+      - in: query
+        name: limit
+        schema:
+          type: integer
+      - in: query
+        name: page
+        schema:
+          type: integer
+      - in: query
+        name: role
+        schema:
+          type: string
+        description: 'customer|provider (default: ambos)'
+      - in: query
+        name: status
+        schema:
+          type: string
+        description: pending|confirmed|cancelled|completed
+      tags:
+      - Reservas
+      security:
+      - jwtAuth: []
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Booking'
+            application/vnd.txopela.v1+json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Booking'
+          description: ''
+  /api/bookings/{id}/status/:
+    put:
+      operationId: bookings_status_update
+      summary: Atualizar status da reserva
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - Reservas
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BookingStatusRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/BookingStatusRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/BookingStatusRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Booking'
+            application/vnd.txopela.v1+json:
+              schema:
+                $ref: '#/components/schemas/Booking'
+          description: ''
+        '403':
+          description: Sem permissão
+        '404':
+          description: Reserva não encontrada
+  /api/comments/{id}/like/:
+    post:
+      operationId: comments_like_create
+      summary: Like num comentário
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - Comentários
+      security:
+      - jwtAuth: []
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CommentLikeResponse'
+            application/vnd.txopela.v1+json:
+              schema:
+                $ref: '#/components/schemas/CommentLikeResponse'
+          description: ''
+        '404':
+          description: Não encontrado
+    delete:
+      operationId: comments_like_destroy
+      summary: Remover like de comentário
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - Comentários
+      security:
+      - jwtAuth: []
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CommentLikeResponse'
+            application/vnd.txopela.v1+json:
+              schema:
+                $ref: '#/components/schemas/CommentLikeResponse'
+          description: ''
+        '404':
+          description: Não encontrado
+  /api/locals/:
+    get:
+      operationId: locals_list
+      summary: Listar locais
+      parameters:
+      - in: query
+        name: category
+        schema:
+          type: string
+        description: restaurant|hotel|attraction|shop|service
+      - in: query
+        name: latitude
+        schema:
+          type: number
+          format: float
+        description: Para busca por proximidade
+      - in: query
+        name: limit
+        schema:
+          type: integer
+        description: 'max: 50'
+      - in: query
+        name: longitude
+        schema:
+          type: number
+          format: float
+      - in: query
+        name: page
+        schema:
+          type: integer
+      - in: query
+        name: province
+        schema:
+          type: string
+      - in: query
+        name: radius
+        schema:
+          type: number
+          format: float
+        description: 'Raio em km (default: 10)'
+      - in: query
+        name: search
+        schema:
+          type: string
+      - in: query
+        name: sortBy
+        schema:
+          type: string
+        description: recent|popular|distance|rating
+      tags:
+      - Locais
+      security:
+      - jwtAuth: []
+      - jwtAuth: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/LocalList'
+            application/vnd.txopela.v1+json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/LocalList'
+          description: ''
+    post:
+      operationId: locals_create
+      description: multipart/form-data. location e contact como JSON strings.
+      summary: Criar local
+      tags:
+      - Locais
+      requestBody:
+        content:
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/LocalWriteRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/LocalWriteRequest'
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LocalWriteRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      - jwtAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LocalDetail'
+            application/vnd.txopela.v1+json:
+              schema:
+                $ref: '#/components/schemas/LocalDetail'
+          description: ''
+        '400':
+          description: Inválido
+  /api/locals/{id}/:
+    get:
+      operationId: locals_retrieve
+      summary: Detalhes de um local
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - Locais
+      security:
+      - jwtAuth: []
+      - jwtAuth: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LocalDetail'
+            application/vnd.txopela.v1+json:
+              schema:
+                $ref: '#/components/schemas/LocalDetail'
+          description: ''
+        '404':
+          description: Não encontrado
+    put:
+      operationId: locals_update
+      summary: Atualizar local (só dono ou admin)
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - Locais
+      requestBody:
+        content:
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/LocalWriteRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/LocalWriteRequest'
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LocalWriteRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LocalDetail'
+            application/vnd.txopela.v1+json:
+              schema:
+                $ref: '#/components/schemas/LocalDetail'
+          description: ''
+        '403':
+          description: Sem permissão
+    delete:
+      operationId: locals_destroy
+      summary: Deletar local (só dono ou admin)
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - Locais
+      security:
+      - jwtAuth: []
+      - jwtAuth: []
+      responses:
+        '200':
+          description: Deletado
+        '403':
+          description: Sem permissão
+  /api/locals/{id}/reviews/:
+    get:
+      operationId: locals_reviews_list
+      summary: Listar reviews de um local
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - Locais
+      security:
+      - jwtAuth: []
+      - jwtAuth: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/LocalReview'
+            application/vnd.txopela.v1+json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/LocalReview'
+          description: ''
+    post:
+      operationId: locals_reviews_create
+      summary: Criar review de um local
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - Locais
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LocalReviewWriteRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/LocalReviewWriteRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/LocalReviewWriteRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      - jwtAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LocalReview'
+            application/vnd.txopela.v1+json:
+              schema:
+                $ref: '#/components/schemas/LocalReview'
+          description: ''
+        '400':
+          description: Inválido
+  /api/locals/geocode/:
+    get:
+      operationId: locals_geocode_retrieve
+      description: |-
+        Converte coordenadas GPS em endereço estruturado (província, distrito, localidade).
+
+        O frontend usa este endpoint para preencher automaticamente o formulário de localização após o utilizador seleccionar o ponto no mapa. O utilizador confirma ou edita os dados antes de submeter.
+      summary: Reverse geocoding — lat/lon → endereço
+      parameters:
+      - in: query
+        name: lat
+        schema:
+          type: number
+          format: float
+        description: 'Latitude (ex: -23.865)'
+        required: true
+      - in: query
+        name: lon
+        schema:
+          type: number
+          format: float
+        description: 'Longitude (ex: 35.383)'
+        required: true
+      tags:
+      - Locais
+      security:
+      - jwtAuth: []
+      - jwtAuth: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GeocodeResponse'
+            application/vnd.txopela.v1+json:
+              schema:
+                $ref: '#/components/schemas/GeocodeResponse'
+          description: ''
+        '400':
+          description: Parâmetros inválidos
+  /api/notifications/:
+    get:
+      operationId: notifications_retrieve
+      summary: Listar notificações do utilizador
+      parameters:
+      - in: query
+        name: limit
+        schema:
+          type: integer
+      - in: query
+        name: page
+        schema:
+          type: integer
+      - in: query
+        name: unreadOnly
+        schema:
+          type: boolean
+        description: true = apenas não lidas
+      tags:
+      - Notificações
+      security:
+      - jwtAuth: []
+      - jwtAuth: []
+      responses:
+        '200':
+          description: Lista de notificações
+  /api/notifications/{id}/read/:
+    put:
+      operationId: notifications_read_update
+      summary: Marcar notificação como lida
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - Notificações
+      security:
+      - jwtAuth: []
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MarkReadResponse'
+            application/vnd.txopela.v1+json:
+              schema:
+                $ref: '#/components/schemas/MarkReadResponse'
+          description: ''
+        '404':
+          description: Notificação não encontrada
+  /api/notifications/mark-all-read/:
+    put:
+      operationId: notifications_mark_all_read_update
+      summary: Marcar todas as notificações como lidas
+      tags:
+      - Notificações
+      security:
+      - jwtAuth: []
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MarkReadResponse'
+            application/vnd.txopela.v1+json:
+              schema:
+                $ref: '#/components/schemas/MarkReadResponse'
+          description: ''
+  /api/posts/:
+    get:
+      operationId: posts_list
+      summary: Listar posts
+      parameters:
+      - in: query
+        name: category
+        schema:
+          type: string
+        description: discovery|review|tip|story|other
+      - in: query
+        name: limit
+        schema:
+          type: integer
+        description: 'max: 50'
+      - in: query
+        name: page
+        schema:
+          type: integer
+      - in: query
+        name: province
+        schema:
+          type: string
+      - in: query
+        name: search
+        schema:
+          type: string
+      - in: query
+        name: sortBy
+        schema:
+          type: string
+        description: recent|popular|trending
+      - in: query
+        name: userId
+        schema:
+          type: string
+          format: uuid
+      tags:
+      - Posts
+      security:
+      - jwtAuth: []
+      - jwtAuth: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/PostList'
+            application/vnd.txopela.v1+json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/PostList'
+          description: ''
+    post:
+      operationId: posts_create
+      description: 'multipart/form-data: title, content, category, province, location(JSON),
+        tags(JSON), images(files)'
+      summary: Criar post
+      tags:
+      - Posts
+      requestBody:
+        content:
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PostWriteRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PostWriteRequest'
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PostWriteRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      - jwtAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PostDetail'
+            application/vnd.txopela.v1+json:
+              schema:
+                $ref: '#/components/schemas/PostDetail'
+          description: ''
+        '400':
+          description: Inválido
+  /api/posts/{id}/:
+    get:
+      operationId: posts_retrieve
+      summary: Detalhes de um post
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - Posts
+      security:
+      - jwtAuth: []
+      - jwtAuth: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PostDetail'
+            application/vnd.txopela.v1+json:
+              schema:
+                $ref: '#/components/schemas/PostDetail'
+          description: ''
+        '404':
+          description: Não encontrado
+    put:
+      operationId: posts_update
+      summary: Atualizar post (só autor)
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - Posts
+      requestBody:
+        content:
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PostWriteRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PostWriteRequest'
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PostWriteRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PostDetail'
+            application/vnd.txopela.v1+json:
+              schema:
+                $ref: '#/components/schemas/PostDetail'
+          description: ''
+        '403':
+          description: Sem permissão
+    delete:
+      operationId: posts_destroy
+      summary: Deletar post (só autor)
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - Posts
+      security:
+      - jwtAuth: []
+      - jwtAuth: []
+      responses:
+        '200':
+          description: Deletado
+        '403':
+          description: Sem permissão
+  /api/posts/{id}/comments/:
+    get:
+      operationId: posts_comments_list
+      summary: Listar comentários
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      - in: query
+        name: limit
+        schema:
+          type: integer
+      - in: query
+        name: page
+        schema:
+          type: integer
+      tags:
+      - Comentários
+      security:
+      - jwtAuth: []
+      - jwtAuth: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Comment'
+            application/vnd.txopela.v1+json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Comment'
+          description: ''
+    post:
+      operationId: posts_comments_create
+      summary: Criar comentário ou reply
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - Comentários
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CommentCreateRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/CommentCreateRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      - jwtAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Comment'
+            application/vnd.txopela.v1+json:
+              schema:
+                $ref: '#/components/schemas/Comment'
+          description: ''
+        '404':
+          description: Post não encontrado
+  /api/posts/{id}/like/:
+    post:
+      operationId: posts_like_create
+      summary: Dar like
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - Posts
+      security:
+      - jwtAuth: []
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LikeResponse'
+            application/vnd.txopela.v1+json:
+              schema:
+                $ref: '#/components/schemas/LikeResponse'
+          description: ''
+        '404':
+          description: Não encontrado
+    delete:
+      operationId: posts_like_destroy
+      summary: Remover like
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - Posts
+      security:
+      - jwtAuth: []
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LikeResponse'
+            application/vnd.txopela.v1+json:
+              schema:
+                $ref: '#/components/schemas/LikeResponse'
+          description: ''
+        '404':
+          description: Não encontrado
+  /api/posts/{id}/report/:
+    post:
+      operationId: posts_report_create
+      summary: Denunciar post
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - Posts
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReportRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/ReportRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/ReportRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      - jwtAuth: []
+      responses:
+        '200':
+          description: Denúncia enviada
+        '400':
+          description: Já denunciado
+  /api/posts/{id}/save/:
+    post:
+      operationId: posts_save_create
+      summary: Guardar post
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - Posts
+      security:
+      - jwtAuth: []
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SaveResponse'
+            application/vnd.txopela.v1+json:
+              schema:
+                $ref: '#/components/schemas/SaveResponse'
+          description: ''
+        '404':
+          description: Não encontrado
+    delete:
+      operationId: posts_save_destroy
+      summary: Remover post guardado
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - Posts
+      security:
+      - jwtAuth: []
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SaveResponse'
+            application/vnd.txopela.v1+json:
+              schema:
+                $ref: '#/components/schemas/SaveResponse'
+          description: ''
+        '404':
+          description: Não encontrado
+  /api/reviews/{id}/helpful/:
+    post:
+      operationId: reviews_helpful_create
+      summary: Marcar review como útil
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - Locais
+      security:
+      - jwtAuth: []
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReviewHelpfulResponse'
+            application/vnd.txopela.v1+json:
+              schema:
+                $ref: '#/components/schemas/ReviewHelpfulResponse'
+          description: ''
+        '404':
+          description: Não encontrado
+  /api/search/:
+    get:
+      operationId: search_retrieve
+      description: Pesquisa em simultâneo em Posts, Locais, Serviços e Utilizadores.
+      summary: Busca universal
+      parameters:
+      - in: query
+        name: latitude
+        schema:
+          type: number
+          format: float
+        description: Para busca por proximidade
+      - in: query
+        name: limit
+        schema:
+          type: integer
+        description: 'Items por tipo (max: 20, default: 10)'
+      - in: query
+        name: longitude
+        schema:
+          type: number
+          format: float
+      - in: query
+        name: page
+        schema:
+          type: integer
+      - in: query
+        name: province
+        schema:
+          type: string
+        description: Filtrar por província
+      - in: query
+        name: q
+        schema:
+          type: string
+        description: Termo de busca
+        required: true
+      - in: query
+        name: radius
+        schema:
+          type: number
+          format: float
+        description: Raio em km
+      - in: query
+        name: type
+        schema:
+          type: string
+        description: 'all|posts|locals|services|users (default: all)'
+      tags:
+      - Pesquisa
+      security:
+      - jwtAuth: []
+      - jwtAuth: []
+      - {}
+      responses:
+        '200':
+          description: Resultados da busca
+  /api/search/suggestions/:
+    get:
+      operationId: search_suggestions_retrieve
+      description: Retorna sugestões baseadas no termo parcial para autocompletar.
+      summary: Sugestões e autocompletar
+      parameters:
+      - in: query
+        name: q
+        schema:
+          type: string
+        description: Termo parcial
+        required: true
+      - in: query
+        name: type
+        schema:
+          type: string
+        description: 'places|categories|tags (default: todos)'
+      tags:
+      - Pesquisa
+      security:
+      - jwtAuth: []
+      - jwtAuth: []
+      - {}
+      responses:
+        '200':
+          description: Lista de sugestões
+  /api/services/:
+    get:
+      operationId: services_list
+      summary: Listar serviços
+      parameters:
+      - in: query
+        name: availability
+        schema:
+          type: boolean
+        description: true = apenas disponíveis
+      - in: query
+        name: category
+        schema:
+          type: string
+        description: transport|guide|accommodation|experience|equipment
+      - in: query
+        name: limit
+        schema:
+          type: integer
+        description: 'max: 50'
+      - in: query
+        name: page
+        schema:
+          type: integer
+      - in: query
+        name: province
+        schema:
+          type: string
+      - in: query
+        name: search
+        schema:
+          type: string
+      - in: query
+        name: sortBy
+        schema:
+          type: string
+        description: recent|popular|rating
+      tags:
+      - Serviços
+      security:
+      - jwtAuth: []
+      - jwtAuth: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ServiceList'
+            application/vnd.txopela.v1+json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ServiceList'
+          description: ''
+    post:
+      operationId: services_create
+      description: multipart/form-data. pricing, location, availability como JSON
+        strings.
+      summary: Criar serviço
+      tags:
+      - Serviços
+      requestBody:
+        content:
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/ServiceWriteRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/ServiceWriteRequest'
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ServiceWriteRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      - jwtAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ServiceDetail'
+            application/vnd.txopela.v1+json:
+              schema:
+                $ref: '#/components/schemas/ServiceDetail'
+          description: ''
+        '400':
+          description: Inválido
+  /api/services/{id}/:
+    get:
+      operationId: services_retrieve
+      summary: Detalhes de um serviço
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - Serviços
+      security:
+      - jwtAuth: []
+      - jwtAuth: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ServiceDetail'
+            application/vnd.txopela.v1+json:
+              schema:
+                $ref: '#/components/schemas/ServiceDetail'
+          description: ''
+        '404':
+          description: Não encontrado
+    put:
+      operationId: services_update
+      summary: Atualizar serviço (só fornecedor/admin)
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - Serviços
+      requestBody:
+        content:
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/ServiceWriteRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/ServiceWriteRequest'
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ServiceWriteRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ServiceDetail'
+            application/vnd.txopela.v1+json:
+              schema:
+                $ref: '#/components/schemas/ServiceDetail'
+          description: ''
+        '403':
+          description: Sem permissão
+    delete:
+      operationId: services_destroy
+      summary: Deletar serviço (só fornecedor/admin)
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - Serviços
+      security:
+      - jwtAuth: []
+      - jwtAuth: []
+      responses:
+        '200':
+          description: Deletado
+        '403':
+          description: Sem permissão
+  /api/services/{id}/bookings/:
+    post:
+      operationId: services_bookings_create
+      summary: Criar reserva de serviço
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - Reservas
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BookingCreateRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/BookingCreateRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/BookingCreateRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      - jwtAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Booking'
+            application/vnd.txopela.v1+json:
+              schema:
+                $ref: '#/components/schemas/Booking'
+          description: ''
+        '404':
+          description: Serviço não encontrado
+  /api/services/{id}/reviews/:
+    get:
+      operationId: services_reviews_list
+      summary: Listar reviews de um serviço
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - Serviços
+      security:
+      - jwtAuth: []
+      - jwtAuth: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ServiceReview'
+            application/vnd.txopela.v1+json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ServiceReview'
+          description: ''
+    post:
+      operationId: services_reviews_create
+      summary: Criar review de serviço
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - Serviços
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ServiceReviewWriteRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/ServiceReviewWriteRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/ServiceReviewWriteRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      - jwtAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ServiceReview'
+            application/vnd.txopela.v1+json:
+              schema:
+                $ref: '#/components/schemas/ServiceReview'
+          description: ''
+  /api/upload/images/:
+    post:
+      operationId: upload_images_create
+      description: |-
+        Faz upload de até 10 imagens como **multipart/form-data**.
+
+        - `files`: até 10 imagens (JPEG, PNG, WEBP, GIF, máx 10MB cada)
+        - `context`: `post` | `local` | `service` | `profile` | `other`
+      summary: Upload de imagens
+      tags:
+      - Upload
+      requestBody:
+        content:
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/ImageUploadRequestRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/ImageUploadRequestRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      - jwtAuth: []
+      responses:
+        '200':
+          description: Imagens carregadas com sucesso
+        '400':
+          description: Arquivo inválido ou limite excedido
+  /api/upload/images/{id}/:
+    delete:
+      operationId: upload_images_destroy
+      description: Remove uma imagem enviada pelo utilizador. Apenas o dono pode apagar.
+      summary: Deletar imagem
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - Upload
+      security:
+      - jwtAuth: []
+      - jwtAuth: []
+      responses:
+        '200':
+          description: Imagem deletada com sucesso
+        '403':
+          description: Sem permissão
+        '404':
+          description: Imagem não encontrada
+  /api/users/{id}/:
+    get:
+      operationId: users_retrieve
+      description: Retorna o perfil público de qualquer usuário pelo ID.
+      summary: Perfil público de um usuário
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - Utilizadores
+      security:
+      - jwtAuth: []
+      - jwtAuth: []
+      - {}
+      responses:
+        '200':
+          description: Perfil retornado com sucesso
+        '404':
+          description: Usuário não encontrado
+  /api/users/{id}/follow/:
+    post:
+      operationId: users_follow_create
+      description: POST /api/users/{userId}/follow — seguir
+      summary: Seguir / deixar de seguir um utilizador
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - Utilizadores
+      security:
+      - jwtAuth: []
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FollowResponse'
+            application/vnd.txopela.v1+json:
+              schema:
+                $ref: '#/components/schemas/FollowResponse'
+          description: ''
+        '400':
+          description: Não pode seguir a si mesmo
+        '404':
+          description: Utilizador não encontrado
+    delete:
+      operationId: users_follow_destroy
+      description: DELETE /api/users/{userId}/follow — deixar de seguir
+      summary: Deixar de seguir um utilizador
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - Utilizadores
+      security:
+      - jwtAuth: []
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UnfollowResponse'
+            application/vnd.txopela.v1+json:
+              schema:
+                $ref: '#/components/schemas/UnfollowResponse'
+          description: ''
+        '404':
+          description: Utilizador não encontrado
+  /api/users/me/:
+    get:
+      operationId: users_me_retrieve
+      description: GET retorna o perfil completo com stats. PUT atualiza name, phone,
+        dateOfBirth e/ou bio.
+      summary: Perfil completo do usuário autenticado
+      tags:
+      - Utilizadores
+      security:
+      - jwtAuth: []
+      - jwtAuth: []
+      responses:
+        '200':
+          description: Perfil retornado
+        '401':
+          description: Não autenticado
+    put:
+      operationId: users_me_update
+      summary: Atualizar perfil do usuário autenticado
+      tags:
+      - Utilizadores
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UserUpdateRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/UserUpdateRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/UserUpdateRequest'
+      security:
+      - jwtAuth: []
+      - jwtAuth: []
+      responses:
+        '200':
+          description: Perfil atualizado
+        '400':
+          description: Dados inválidos
+  /api/users/upload-avatar/:
+    post:
+      operationId: users_upload_avatar_create
+      description: Faz upload da foto de perfil. Enviar como multipart/form-data com
+        campo **file**.
+      summary: Upload de avatar do usuário
+      tags:
+      - Utilizadores
+      requestBody:
+        content:
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/AvatarUploadRequestRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/AvatarUploadRequestRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AvatarUploadResponse'
+            application/vnd.txopela.v1+json:
+              schema:
+                $ref: '#/components/schemas/AvatarUploadResponse'
+          description: ''
+        '400':
+          description: Arquivo inválido ou ausente
+        '401':
+          description: Não autenticado
+components:
+  schemas:
+    ActionEnum:
+      enum:
+      - approve
+      - reject
+      type: string
+    AdminStatsResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        stats:
+          type: object
+          additionalProperties: {}
+      required:
+      - stats
+      - success
+    AdminUserListResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        users:
+          type: array
+          items:
+            type: object
+            additionalProperties: {}
+        pagination:
+          type: object
+          additionalProperties: {}
+      required:
+      - pagination
+      - success
+      - users
+    ApproveItemRequestRequest:
+      type: object
+      properties:
+        action:
+          $ref: '#/components/schemas/ActionEnum'
+        reason:
+          type: string
+      required:
+      - action
+    ApproveItemResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        message:
+          type: string
+        status:
+          type: string
+      required:
+      - message
+      - status
+      - success
+    AvatarUploadRequestRequest:
+      type: object
+      properties:
+        file:
+          type: string
+          format: binary
+      required:
+      - file
+    AvatarUploadResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        avatarUrl:
+          type: string
+          format: uri
+      required:
+      - avatarUrl
+      - success
+    Booking:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        serviceId:
+          type: string
+          readOnly: true
+        service:
+          allOf:
+          - $ref: '#/components/schemas/BookingService'
+          readOnly: true
+        customer:
+          allOf:
+          - $ref: '#/components/schemas/BookingPerson'
+          readOnly: true
+        provider:
+          allOf:
+          - $ref: '#/components/schemas/BookingPerson'
+          readOnly: true
+        startDate:
+          type: string
+          format: date
+          readOnly: true
+        endDate:
+          type: string
+          format: date
+          readOnly: true
+        participants:
+          type: integer
+          maximum: 32767
+          minimum: 0
+          default: 1
+        message:
+          type: string
+        status:
+          allOf:
+          - $ref: '#/components/schemas/BookingStatusEnum'
+          default: pending
+        totalAmount:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,8}(?:\.\d{0,2})?$
+          readOnly: true
+        createdAt:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - createdAt
+      - customer
+      - endDate
+      - id
+      - provider
+      - service
+      - serviceId
+      - startDate
+      - totalAmount
+    BookingCreateRequest:
+      type: object
+      properties:
+        startDate:
+          type: string
+          format: date
+        endDate:
+          type: string
+          format: date
+          nullable: true
+        participants:
+          type: integer
+          minimum: 1
+          default: 1
+        message:
+          type: string
+        contactInfo:
+          type: object
+          additionalProperties: {}
+        specialRequests:
+          type: string
+      required:
+      - startDate
+    BookingPerson:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+      required:
+      - id
+      - name
+    BookingService:
+      type: object
+      properties:
+        id:
+          type: string
+        title:
+          type: string
+        images:
+          type: array
+          items:
+            type: string
+            format: uri
+          readOnly: true
+      required:
+      - id
+      - images
+      - title
+    BookingStatusEnum:
+      enum:
+      - pending
+      - confirmed
+      - cancelled
+      - completed
+      type: string
+    BookingStatusRequest:
+      type: object
+      properties:
+        status:
+          $ref: '#/components/schemas/BookingStatusStatusEnum'
+        reason:
+          type: string
+      required:
+      - status
+    BookingStatusStatusEnum:
+      enum:
+      - confirmed
+      - cancelled
+      - completed
+      type: string
+    Comment:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        content:
+          type: string
+        author:
+          allOf:
+          - $ref: '#/components/schemas/CommentAuthor'
+          readOnly: true
+        likesCount:
+          type: integer
+          readOnly: true
+        hasLiked:
+          type: boolean
+          readOnly: true
+        createdAt:
+          type: string
+          format: date-time
+          readOnly: true
+        replies:
+          type: array
+          items:
+            $ref: '#/components/schemas/Reply'
+          readOnly: true
+      required:
+      - author
+      - content
+      - createdAt
+      - hasLiked
+      - id
+      - likesCount
+      - replies
+    CommentAuthor:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+          readOnly: true
+        avatar:
+          type: string
+          format: uri
+          readOnly: true
+      required:
+      - avatar
+      - id
+      - name
+    CommentCreateRequest:
+      type: object
+      properties:
+        content:
+          type: string
+          minLength: 1
+        parentId:
+          type: string
+          format: uuid
+          nullable: true
+      required:
+      - content
+    CommentLikeResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        hasLiked:
+          type: boolean
+        likesCount:
+          type: integer
+      required:
+      - hasLiked
+      - likesCount
+      - success
+    ContentStatusEnum:
+      enum:
+      - pending
+      - approved
+      - rejected
+      type: string
+    ContextEnum:
+      enum:
+      - post
+      - local
+      - service
+      - profile
+      - other
+      type: string
+    FollowResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        isFollowing:
+          type: boolean
+      required:
+      - isFollowing
+      - success
+    GeocodeResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        address:
+          type: string
+        province:
+          type: string
+        district:
+          type: string
+        locality:
+          type: string
+        country:
+          type: string
+        countryCode:
+          type: string
+        displayName:
+          type: string
+        latitude:
+          type: number
+          format: double
+        longitude:
+          type: number
+          format: double
+      required:
+      - address
+      - country
+      - countryCode
+      - displayName
+      - district
+      - latitude
+      - locality
+      - longitude
+      - province
+      - success
+    ImageUploadRequestRequest:
+      type: object
+      properties:
+        files:
+          type: array
+          items:
+            type: string
+            format: binary
+        context:
+          allOf:
+          - $ref: '#/components/schemas/ContextEnum'
+          default: other
+      required:
+      - files
+    LanguageEnum:
+      enum:
+      - pt
+      - en
+      type: string
+    LikeResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        hasLiked:
+          type: boolean
+        likesCount:
+          type: integer
+      required:
+      - hasLiked
+      - likesCount
+      - success
+    LocalCategoryEnum:
+      enum:
+      - restaurant
+      - hotel
+      - attraction
+      - shop
+      - service
+      type: string
+    LocalDetail:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        name:
+          type: string
+          maxLength: 200
+        description:
+          type: string
+        category:
+          allOf:
+          - $ref: '#/components/schemas/LocalCategoryEnum'
+          default: attraction
+        subcategory:
+          type: string
+          description: 'Tipo de lugar (ex: Praia, Floresta, Museu, Mercado)'
+          maxLength: 100
+        bestSeason:
+          type: string
+          readOnly: true
+        highlights:
+          description: Lista de destaques do lugar
+        images:
+          type: array
+          items:
+            type: string
+            format: uri
+          readOnly: true
+        location:
+          type: object
+          additionalProperties: {}
+          readOnly: true
+        contact:
+          type: object
+          additionalProperties:
+            type: string
+          readOnly: true
+        hours: {}
+        rating:
+          type: object
+          additionalProperties: {}
+          readOnly: true
+        priceRange:
+          type: string
+          readOnly: true
+        amenities: {}
+        owner:
+          allOf:
+          - $ref: '#/components/schemas/LocalOwner'
+          readOnly: true
+        status:
+          allOf:
+          - $ref: '#/components/schemas/ContentStatusEnum'
+          default: pending
+        createdAt:
+          type: string
+          format: date-time
+          readOnly: true
+        distance:
+          type: number
+          format: float
+          readOnly: true
+        reviews:
+          type: array
+          items:
+            $ref: '#/components/schemas/LocalReview'
+          readOnly: true
+        relatedLocals:
+          type: array
+          items:
+            $ref: '#/components/schemas/LocalList'
+          readOnly: true
+      required:
+      - bestSeason
+      - contact
+      - createdAt
+      - description
+      - distance
+      - id
+      - images
+      - location
+      - name
+      - owner
+      - priceRange
+      - rating
+      - relatedLocals
+      - reviews
+    LocalList:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        name:
+          type: string
+          maxLength: 200
+        description:
+          type: string
+        category:
+          allOf:
+          - $ref: '#/components/schemas/LocalCategoryEnum'
+          default: attraction
+        subcategory:
+          type: string
+          description: 'Tipo de lugar (ex: Praia, Floresta, Museu, Mercado)'
+          maxLength: 100
+        bestSeason:
+          type: string
+          readOnly: true
+        highlights:
+          description: Lista de destaques do lugar
+        images:
+          type: array
+          items:
+            type: string
+            format: uri
+          readOnly: true
+        location:
+          type: object
+          additionalProperties: {}
+          readOnly: true
+        contact:
+          type: object
+          additionalProperties:
+            type: string
+          readOnly: true
+        hours: {}
+        rating:
+          type: object
+          additionalProperties: {}
+          readOnly: true
+        priceRange:
+          type: string
+          readOnly: true
+        amenities: {}
+        owner:
+          allOf:
+          - $ref: '#/components/schemas/LocalOwner'
+          readOnly: true
+        status:
+          allOf:
+          - $ref: '#/components/schemas/ContentStatusEnum'
+          default: pending
+        createdAt:
+          type: string
+          format: date-time
+          readOnly: true
+        distance:
+          type: number
+          format: float
+          readOnly: true
+      required:
+      - bestSeason
+      - contact
+      - createdAt
+      - description
+      - distance
+      - id
+      - images
+      - location
+      - name
+      - owner
+      - priceRange
+      - rating
+    LocalOwner:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+          readOnly: true
+        avatar:
+          type: string
+          format: uri
+          readOnly: true
+      required:
+      - avatar
+      - id
+      - name
+    LocalReview:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        rating:
+          type: integer
+          maximum: 32767
+          minimum: 0
+        comment:
+          type: string
+        author:
+          allOf:
+          - $ref: '#/components/schemas/LocalOwner'
+          readOnly: true
+        createdAt:
+          type: string
+          format: date-time
+          readOnly: true
+        helpful:
+          type: integer
+          maximum: 2147483647
+          minimum: 0
+          default: 0
+      required:
+      - author
+      - comment
+      - createdAt
+      - id
+      - rating
+    LocalReviewWriteRequest:
+      type: object
+      properties:
+        rating:
+          type: integer
+          maximum: 5
+          minimum: 1
+        comment:
+          type: string
+          minLength: 1
+      required:
+      - comment
+      - rating
+    LocalWriteCategoryEnum:
+      enum:
+      - restaurant
+      - hotel
+      - attraction
+      - shop
+      - service
+      type: string
+    LocalWriteRequest:
+      type: object
+      properties:
+        name:
+          type: string
+          minLength: 1
+          description: Nome do lugar *
+          maxLength: 200
+        description:
+          type: string
+          minLength: 1
+          description: Descrição detalhada *
+        category:
+          allOf:
+          - $ref: '#/components/schemas/LocalWriteCategoryEnum'
+          default: attraction
+          description: 'Categoria *: restaurant | hotel | attraction | shop | service'
+        subcategory:
+          type: string
+          description: 'Tipo de lugar (ex: Praia, Floresta, Museu, Mercado)'
+        best_season:
+          type: string
+          description: 'Melhor época para visitar * (ex: Abril a Outubro)'
+        highlights:
+          description: 'Destaques * — lista: ["Mergulho com tubarões-baleia","Pôr
+            do sol"]'
+        province:
+          type: string
+          description: 'Província * (ex: Inhambane)'
+        municipality:
+          type: string
+          description: 'Distrito / Cidade * (ex: Inhambane)'
+        address:
+          type: string
+          description: 'Endereço / Referência (ex: Junto ao farol da Barra)'
+        latitude:
+          type: number
+          format: double
+          nullable: true
+          description: Latitude (do geocoding)
+        longitude:
+          type: number
+          format: double
+          nullable: true
+          description: Longitude (do geocoding)
+        phone:
+          type: string
+        whatsapp:
+          type: string
+        email:
+          type: string
+          format: email
+        website:
+          type: string
+        hours:
+          description: 'Horário JSON: {"monday":{"open":"09:00","close":"18:00"}}'
+        priceRange:
+          type: string
+          description: 'Faixa de preço: $ | $$ | $$$ | $$$$'
+        amenities:
+          description: 'Comodidades: ["wifi","parking","sea_view"]'
+        images:
+          type: array
+          items:
+            type: string
+            format: binary
+          description: Até 10 fotos (JPG, PNG — máx 10MB cada)
+          maxItems: 10
+      required:
+      - description
+      - name
+    LoginRequest:
+      type: object
+      properties:
+        email:
+          type: string
+          format: email
+          minLength: 1
+        password:
+          type: string
+          writeOnly: true
+          minLength: 1
+      required:
+      - email
+      - password
+    LogoutRequest:
+      type: object
+      description: Recebe o refreshToken para blacklistá-lo no logout.
+      properties:
+        refreshToken:
+          type: string
+          minLength: 1
+    MarkReadResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        message:
+          type: string
+      required:
+      - message
+      - success
+    PatchedUserProfileRequest:
+      type: object
+      description: Serializer de edição do perfil (PUT/PATCH /api/auth/me).
+      properties:
+        username:
+          type: string
+          minLength: 1
+          title: Utilizador
+          description: Obrigatório. 150 carateres ou menos. Apenas letras, dígitos
+            @/./+/-/_.
+          pattern: ^[\w.@+-]+$
+          maxLength: 150
+        phone:
+          type: string
+          maxLength: 20
+        bio:
+          type: string
+        avatar:
+          type: string
+          format: binary
+          nullable: true
+        language:
+          allOf:
+          - $ref: '#/components/schemas/LanguageEnum'
+          default: pt
+    PostAuthor:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+          readOnly: true
+        avatar:
+          type: string
+          format: uri
+          readOnly: true
+        isFollowing:
+          type: boolean
+          readOnly: true
+      required:
+      - avatar
+      - id
+      - isFollowing
+      - name
+    PostCategoryEnum:
+      enum:
+      - discovery
+      - review
+      - tip
+      - story
+      - other
+      type: string
+    PostDetail:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        title:
+          type: string
+          maxLength: 300
+        content:
+          type: string
+        images:
+          type: array
+          items:
+            type: string
+            format: uri
+          readOnly: true
+        category:
+          allOf:
+          - $ref: '#/components/schemas/PostCategoryEnum'
+          default: discovery
+        province:
+          type: string
+          maxLength: 100
+        location:
+          type: object
+          additionalProperties: {}
+          readOnly: true
+        author:
+          allOf:
+          - $ref: '#/components/schemas/PostAuthor'
+          readOnly: true
+        stats:
+          type: object
+          additionalProperties:
+            type: integer
+          readOnly: true
+        userInteraction:
+          type: object
+          additionalProperties:
+            type: boolean
+          readOnly: true
+        createdAt:
+          type: string
+          format: date-time
+          readOnly: true
+        updatedAt:
+          type: string
+          format: date-time
+          readOnly: true
+        tags: {}
+      required:
+      - author
+      - content
+      - createdAt
+      - id
+      - images
+      - location
+      - stats
+      - tags
+      - title
+      - updatedAt
+      - userInteraction
+    PostList:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        title:
+          type: string
+          maxLength: 300
+        content:
+          type: string
+        images:
+          type: array
+          items:
+            type: string
+            format: uri
+          readOnly: true
+        category:
+          allOf:
+          - $ref: '#/components/schemas/PostCategoryEnum'
+          default: discovery
+        province:
+          type: string
+          maxLength: 100
+        location:
+          type: object
+          additionalProperties: {}
+          readOnly: true
+        author:
+          allOf:
+          - $ref: '#/components/schemas/PostAuthor'
+          readOnly: true
+        stats:
+          type: object
+          additionalProperties:
+            type: integer
+          readOnly: true
+        userInteraction:
+          type: object
+          additionalProperties:
+            type: boolean
+          readOnly: true
+        createdAt:
+          type: string
+          format: date-time
+          readOnly: true
+        updatedAt:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - author
+      - content
+      - createdAt
+      - id
+      - images
+      - location
+      - stats
+      - title
+      - updatedAt
+      - userInteraction
+    PostWriteCategoryEnum:
+      enum:
+      - discovery
+      - review
+      - tip
+      - story
+      - other
+      type: string
+    PostWriteRequest:
+      type: object
+      properties:
+        title:
+          type: string
+          minLength: 1
+          maxLength: 300
+        content:
+          type: string
+          minLength: 1
+        category:
+          allOf:
+          - $ref: '#/components/schemas/PostWriteCategoryEnum'
+          default: discovery
+        province:
+          type: string
+          maxLength: 100
+        location:
+          type: string
+          description: 'JSON: {"latitude":0,"longitude":0,"address":""}'
+        tags:
+          type: string
+          description: 'JSON array: ["tag1","tag2"]'
+        images:
+          type: array
+          items:
+            type: string
+            format: binary
+          maxItems: 10
+      required:
+      - content
+      - title
+    Provider:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+          readOnly: true
+        avatar:
+          type: string
+          format: uri
+          readOnly: true
+        rating:
+          type: number
+          format: float
+          readOnly: true
+        reviewsCount:
+          type: integer
+          readOnly: true
+      required:
+      - avatar
+      - id
+      - name
+      - rating
+      - reviewsCount
+    RefreshTokenRequest:
+      type: object
+      description: Aceita 'refreshToken' (camelCase) conforme spec do frontend.
+      properties:
+        refreshToken:
+          type: string
+          minLength: 1
+      required:
+      - refreshToken
+    RegisterRequest:
+      type: object
+      properties:
+        name:
+          type: string
+          writeOnly: true
+          minLength: 1
+        email:
+          type: string
+          format: email
+          minLength: 1
+        password:
+          type: string
+          writeOnly: true
+          minLength: 8
+        role:
+          allOf:
+          - $ref: '#/components/schemas/RegisterRoleEnum'
+          default: tourist
+          description: tourist = Turista | local_resident = Morador Local | business
+            = Negócio Local
+        phone:
+          type: string
+          default: ''
+        dateOfBirth:
+          type: string
+          format: date
+          nullable: true
+        termsAccepted:
+          type: boolean
+      required:
+      - email
+      - name
+      - password
+      - termsAccepted
+    RegisterResponse:
+      type: object
+      description: Resposta do registro — inclui tokens JWT.
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        email:
+          type: string
+          format: email
+          maxLength: 254
+        role:
+          type: string
+          readOnly: true
+        avatar:
+          type: string
+          format: uri
+          readOnly: true
+        emailVerified:
+          type: boolean
+        createdAt:
+          type: string
+          format: date-time
+        token:
+          type: string
+          readOnly: true
+        refreshToken:
+          type: string
+          readOnly: true
+      required:
+      - avatar
+      - createdAt
+      - email
+      - emailVerified
+      - id
+      - name
+      - refreshToken
+      - role
+      - token
+    RegisterRoleEnum:
+      enum:
+      - tourist
+      - local_resident
+      - business
+      type: string
+    Reply:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        content:
+          type: string
+        author:
+          allOf:
+          - $ref: '#/components/schemas/CommentAuthor'
+          readOnly: true
+        likesCount:
+          type: integer
+          readOnly: true
+        hasLiked:
+          type: boolean
+          readOnly: true
+        createdAt:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - author
+      - content
+      - createdAt
+      - hasLiked
+      - id
+      - likesCount
+    ReportReasonEnum:
+      enum:
+      - spam
+      - inappropriate
+      - fake
+      - copyright
+      - other
+      type: string
+    ReportRequest:
+      type: object
+      properties:
+        reason:
+          $ref: '#/components/schemas/ReportReasonEnum'
+        details:
+          type: string
+      required:
+      - reason
+    ReviewHelpfulResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        helpfulCount:
+          type: integer
+      required:
+      - helpfulCount
+      - success
+    SaveResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        hasSaved:
+          type: boolean
+      required:
+      - hasSaved
+      - success
+    ServiceCategoryEnum:
+      enum:
+      - transport
+      - guide
+      - accommodation
+      - experience
+      - equipment
+      type: string
+    ServiceDetail:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        title:
+          type: string
+          maxLength: 200
+        description:
+          type: string
+        category:
+          allOf:
+          - $ref: '#/components/schemas/ServiceCategoryEnum'
+          default: experience
+        subcategory:
+          type: string
+          maxLength: 100
+        images:
+          type: array
+          items:
+            type: string
+            format: uri
+          readOnly: true
+        provider:
+          allOf:
+          - $ref: '#/components/schemas/Provider'
+          readOnly: true
+        pricing:
+          type: object
+          additionalProperties: {}
+          readOnly: true
+        location:
+          type: object
+          additionalProperties: {}
+          readOnly: true
+        contact:
+          type: object
+          additionalProperties: {}
+          readOnly: true
+        availability:
+          type: object
+          additionalProperties: {}
+          readOnly: true
+        features: {}
+        requirements: {}
+        rating:
+          type: object
+          additionalProperties: {}
+          readOnly: true
+        status:
+          allOf:
+          - $ref: '#/components/schemas/ContentStatusEnum'
+          default: pending
+        createdAt:
+          type: string
+          format: date-time
+          readOnly: true
+        reviews:
+          type: array
+          items:
+            $ref: '#/components/schemas/ServiceReview'
+          readOnly: true
+        relatedServices:
+          type: array
+          items:
+            $ref: '#/components/schemas/ServiceList'
+          readOnly: true
+      required:
+      - availability
+      - contact
+      - createdAt
+      - description
+      - id
+      - images
+      - location
+      - pricing
+      - provider
+      - rating
+      - relatedServices
+      - reviews
+      - title
+    ServiceList:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        title:
+          type: string
+          maxLength: 200
+        description:
+          type: string
+        category:
+          allOf:
+          - $ref: '#/components/schemas/ServiceCategoryEnum'
+          default: experience
+        subcategory:
+          type: string
+          maxLength: 100
+        images:
+          type: array
+          items:
+            type: string
+            format: uri
+          readOnly: true
+        provider:
+          allOf:
+          - $ref: '#/components/schemas/Provider'
+          readOnly: true
+        pricing:
+          type: object
+          additionalProperties: {}
+          readOnly: true
+        location:
+          type: object
+          additionalProperties: {}
+          readOnly: true
+        contact:
+          type: object
+          additionalProperties: {}
+          readOnly: true
+        availability:
+          type: object
+          additionalProperties: {}
+          readOnly: true
+        features: {}
+        requirements: {}
+        rating:
+          type: object
+          additionalProperties: {}
+          readOnly: true
+        status:
+          allOf:
+          - $ref: '#/components/schemas/ContentStatusEnum'
+          default: pending
+        createdAt:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - availability
+      - contact
+      - createdAt
+      - description
+      - id
+      - images
+      - location
+      - pricing
+      - provider
+      - rating
+      - title
+    ServiceReview:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        rating:
+          type: integer
+          maximum: 32767
+          minimum: 0
+        comment:
+          type: string
+        author:
+          type: object
+          additionalProperties: {}
+          readOnly: true
+        createdAt:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - author
+      - comment
+      - createdAt
+      - id
+      - rating
+    ServiceReviewWriteRequest:
+      type: object
+      properties:
+        rating:
+          type: integer
+          maximum: 5
+          minimum: 1
+        comment:
+          type: string
+          minLength: 1
+      required:
+      - comment
+      - rating
+    ServiceWriteCategoryEnum:
+      enum:
+      - transport
+      - guide
+      - accommodation
+      - experience
+      - equipment
+      type: string
+    ServiceWriteRequest:
+      type: object
+      properties:
+        title:
+          type: string
+          minLength: 1
+          maxLength: 200
+        description:
+          type: string
+          minLength: 1
+        category:
+          allOf:
+          - $ref: '#/components/schemas/ServiceWriteCategoryEnum'
+          default: experience
+          description: transport | guide | accommodation | experience | equipment
+        subcategory:
+          type: string
+        schedule:
+          type: string
+          description: 'Ex: Segunda a Sexta, 08:00–18:00'
+        phone:
+          type: string
+          description: Número de telefone principal
+        whatsapp:
+          type: string
+          description: Número WhatsApp (opcional)
+        contact_email:
+          type: string
+          format: email
+          description: Email de contacto (opcional)
+        province:
+          type: string
+        municipality:
+          type: string
+          description: Distrito / Cidade
+        address:
+          type: string
+          description: Endereço completo ou referência
+        pricing:
+          type: string
+          description: 'JSON: {"type":"fixed","amount":100,"currency":"MZN","details":""}'
+        availability:
+          type: string
+          description: 'JSON: {"isAvailable":true,"advanceBooking":0}'
+        features:
+          type: string
+          description: 'JSON array: ["wifi","pickup"]'
+        requirements:
+          type: string
+          description: 'JSON array: ["ID","swimsuit"]'
+        images:
+          type: array
+          items:
+            type: string
+            format: binary
+          maxItems: 20
+      required:
+      - description
+      - title
+    UnfollowResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        isFollowing:
+          type: boolean
+      required:
+      - isFollowing
+      - success
+    UserProfile:
+      type: object
+      description: Serializer de edição do perfil (PUT/PATCH /api/auth/me).
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        email:
+          type: string
+          format: email
+          readOnly: true
+        username:
+          type: string
+          title: Utilizador
+          description: Obrigatório. 150 carateres ou menos. Apenas letras, dígitos
+            @/./+/-/_.
+          pattern: ^[\w.@+-]+$
+          maxLength: 150
+        role:
+          allOf:
+          - $ref: '#/components/schemas/UserRoleEnum'
+          readOnly: true
+        phone:
+          type: string
+          maxLength: 20
+        bio:
+          type: string
+        avatar:
+          type: string
+          format: uri
+          nullable: true
+        language:
+          allOf:
+          - $ref: '#/components/schemas/LanguageEnum'
+          default: pt
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - created_at
+      - email
+      - id
+      - role
+      - username
+    UserProfileRequest:
+      type: object
+      description: Serializer de edição do perfil (PUT/PATCH /api/auth/me).
+      properties:
+        username:
+          type: string
+          minLength: 1
+          title: Utilizador
+          description: Obrigatório. 150 carateres ou menos. Apenas letras, dígitos
+            @/./+/-/_.
+          pattern: ^[\w.@+-]+$
+          maxLength: 150
+        phone:
+          type: string
+          maxLength: 20
+        bio:
+          type: string
+        avatar:
+          type: string
+          format: binary
+          nullable: true
+        language:
+          allOf:
+          - $ref: '#/components/schemas/LanguageEnum'
+          default: pt
+      required:
+      - username
+    UserRoleEnum:
+      enum:
+      - tourist
+      - local_resident
+      - local_business
+      - guide
+      - curator
+      - admin
+      type: string
+    UserStatusRequestRequest:
+      type: object
+      properties:
+        status:
+          $ref: '#/components/schemas/UserStatusRequestStatusEnum'
+        reason:
+          type: string
+      required:
+      - status
+    UserStatusRequestStatusEnum:
+      enum:
+      - active
+      - suspended
+      - banned
+      type: string
+    UserStatusResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        message:
+          type: string
+      required:
+      - message
+      - success
+    UserUpdateRequest:
+      type: object
+      description: Campos editáveis pelo usuário.
+      properties:
+        name:
+          type: string
+          minLength: 1
+        phone:
+          type: string
+          maxLength: 20
+        dateOfBirth:
+          type: string
+          format: date
+          nullable: true
+        bio:
+          type: string
+  securitySchemes:
+    jwtAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Token JWT — obtido via POST /api/auth/login/
+tags:
+- name: Autenticação
+  description: Registo, login, renovação de tokens JWT e logout.
+- name: Utilizadores
+  description: Perfil do utilizador, avatar, seguir e deixar de seguir.
+- name: Posts
+  description: Publicações e descobertas — criação, edição, likes, guardados e denúncias.
+- name: Comentários
+  description: Comentários e respostas em publicações.
+- name: Locais
+  description: Locais turísticos — listagem, pesquisa por proximidade e avaliações.
+- name: Serviços
+  description: Serviços turísticos — transporte, guias, hospedagem e experiências.
+- name: Reservas
+  description: Reservas de serviços — criar, listar e actualizar estado.
+- name: Pesquisa
+  description: Pesquisa global em publicações, locais, serviços e utilizadores.
+- name: Upload
+  description: Upload de imagens para publicações, locais, serviços e perfil.
+- name: Notificações
+  description: Notificações do utilizador — listar e marcar como lida.
+- name: Administração
+  description: Gestão de conteúdo — aprovação, rejeição e moderação.

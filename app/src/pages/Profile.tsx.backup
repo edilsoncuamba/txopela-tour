@@ -1,0 +1,707 @@
+import { useState, useEffect } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
+import {
+  Settings, Camera, ChevronRight, X, ChevronLeft,
+  Star, MapPin, Search, Users, Compass, Send, Heart,
+} from 'lucide-react';
+import { useAuth } from '@/context/AuthContext';
+import DestinationDetail from '@/pages/DestinationDetail';
+import Chatbot from '@/pages/Chatbot';
+import { localsApi, usersApi } from '@/services/api';
+import type { Local } from '@/types';
+
+interface ProfileProps {
+  onSettings: () => void;
+  onLocalPress: (local: Local) => void;
+  onLogout: () => void;
+  onAddPost: () => void;
+}
+
+// ── Tipos internos ──────────────────────────────────────────────────────────
+interface Review {
+  id: string; place: string; rating: number; comment: string; date: string;
+  image: string; category: string; catColor: string; desc: string;
+  provincia: string; reviews: number;
+}
+interface Suggestion {
+  id: string; place: string; desc: string; status: string; date: string;
+  image: string; category: string; catColor: string; rating: number;
+  reviews: number; provincia: string;
+}
+interface Destination {
+  id: string; place: string; desc: string; date: string; image: string;
+  category: string; catColor: string; rating: number; reviews: number; provincia: string;
+}
+interface SearchItem { id: string; query: string; date: string; }
+
+const CAT_COLOR: Record<string, string> = {
+  Praias: '#2BB5C8', Natureza: '#1B5E3B', Cultura: '#7B5EA7',
+  Gastronomia: '#E05A3A', Aventura: '#F4821F', default: '#6B7280',
+};
+
+// ── Destination card ─────────────────────────────────────────────────────────
+function DestCard({ item, onLike, liked, onClick }: {
+  item: Destination; onLike?: () => void; liked?: boolean; onClick?: () => void;
+}) {
+  return (
+    <motion.div 
+      whileHover={{ y: -4, scale: 1.02 }}
+      whileTap={{ scale: 0.98 }}
+      transition={{ type: 'spring', stiffness: 300, damping: 20 }}
+      className="bg-white rounded-2xl overflow-hidden shadow-sm cursor-pointer" 
+      onClick={onClick}
+    >
+      <div className="relative overflow-hidden" style={{ height: 180 }}>
+        <motion.img 
+          whileHover={{ scale: 1.1 }}
+          transition={{ duration: 0.4 }}
+          src={item.image} 
+          alt={item.place} 
+          className="w-full h-full object-cover" 
+        />
+        <div className="absolute inset-0" style={{ background: 'linear-gradient(to top, rgba(0,0,0,0.5) 0%, transparent 55%)' }} />
+        <motion.div 
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.1 }}
+          className="absolute bottom-3 left-3 flex items-center gap-1 px-2 py-1 rounded-full"
+          style={{ background: 'rgba(0,0,0,0.55)', backdropFilter: 'blur(6px)' }}
+        >
+          <Star size={11} fill="#FBBF24" stroke="none" />
+          <span className="text-white text-xs font-bold">{item.rating}</span>
+          <span className="text-white/70 text-[10px]">({item.reviews})</span>
+        </motion.div>
+      </div>
+      <div className="p-3">
+        <div className="flex items-start justify-between mb-1">
+          <p className="text-sm font-black leading-tight flex-1" style={{ color: '#1A1A1A' }}>{item.place}</p>
+          <span className="ml-2 text-[9px] font-bold px-2 py-0.5 rounded-full flex-shrink-0"
+            style={{ background: item.catColor + '20', color: item.catColor }}>{item.category}</span>
+        </div>
+        <p className="text-[11px] leading-snug mb-2.5" style={{ color: '#6B7280' }}>{item.desc}</p>
+        <div className="flex items-center justify-between pt-2 border-t" style={{ borderColor: '#F3F4F6' }}>
+          <div className="flex items-center gap-3">
+            <motion.button 
+              whileHover={{ scale: 1.2 }}
+              whileTap={{ scale: 0.9 }}
+              onClick={e => { e.stopPropagation(); onLike?.(); }} 
+              style={{ color: liked ? '#EF4444' : '#9CA3AF' }}
+            >
+              <motion.div
+                animate={liked ? { scale: [1, 1.3, 1] } : {}}
+                transition={{ duration: 0.3 }}
+              >
+                <Heart size={15} fill={liked ? 'currentColor' : 'none'} />
+              </motion.div>
+            </motion.button>
+            <motion.button 
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
+              className="flex items-center gap-1" 
+              style={{ color: '#9CA3AF' }} 
+              onClick={e => e.stopPropagation()}
+            >
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M22 2L11 13"/><path d="M22 2L15 22 11 13 2 9l20-7z"/>
+              </svg>
+              <span className="text-[10px] font-semibold">Sugerir</span>
+            </motion.button>
+          </div>
+          <motion.button 
+            whileHover={{ scale: 1.05 }}
+            whileTap={{ scale: 0.95 }}
+            className="px-3 py-1.5 rounded-xl text-[10px] font-bold text-white" 
+            style={{ background: '#1B5E3B' }}
+            onClick={e => { e.stopPropagation(); onClick?.(); }}
+          >
+            Ver detalhes
+          </motion.button>
+        </div>
+      </div>
+    </motion.div>
+  );
+}
+
+// ── Reviews screen ───────────────────────────────────────────────────────────
+function ReviewsScreen({ onBack }: { onBack: () => void }) {
+  const [reviews, setReviews] = useState<Review[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [selected, setSelected] = useState<Review | null>(null);
+
+  useEffect(() => {
+    const load = async () => {
+      try {
+        const { data } = (await usersApi.myReviews?.()) ?? { data: null };
+        const items: any[] = Array.isArray(data) ? data : (data?.results ?? data?.reviews ?? []);
+        setReviews(items.map((r: any) => ({
+          id: String(r.id),
+          place: r.local?.name || r.place || 'Local',
+          rating: parseFloat(r.rating ?? 0) || 5,
+          comment: r.comment || r.text || '',
+          date: r.createdAt ? new Date(r.createdAt).toLocaleDateString('pt-PT') : '',
+          image: r.local?.images?.[0]?.url || r.local?.cover_image || '/images/local-1.jpg',
+          category: r.local?.category?.name || r.category || 'Local',
+          catColor: CAT_COLOR[r.local?.category?.name] || CAT_COLOR.default,
+          desc: r.local?.description || '',
+          provincia: r.local?.location?.province || '',
+          reviews: r.local?.rating?.count ?? 0,
+        })));
+      } catch {
+        setReviews([]);
+      } finally { setIsLoading(false); }
+    };
+    load();
+  }, []);
+
+  if (selected) {
+    return (
+      <DestinationDetail
+        destination={{ id: selected.id, name: selected.place, category: selected.category, provincia: selected.provincia, desc: selected.desc, image: selected.image, rating: selected.rating, reviews: selected.reviews, melhorEpoca: 'Todo o ano' }}
+        onBack={() => setSelected(null)} onExploreMore={() => setSelected(null)} />
+    );
+  }
+  return (
+    <motion.div className="min-h-screen pb-24" style={{ background: '#F5F5F0', fontFamily: 'Nunito, sans-serif' }}
+      initial={{ opacity: 0, x: '100%' }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: '100%' }}
+      transition={{ type: 'spring', damping: 25, stiffness: 200 }}>
+      <div className="bg-white px-4 pt-5 pb-4 sticky top-0 z-10 shadow-sm flex items-center gap-3">
+        <button onClick={onBack} className="w-9 h-9 rounded-full flex items-center justify-center" style={{ background: '#F3F4F6' }}>
+          <ChevronLeft size={20} strokeWidth={2.5} />
+        </button>
+        <h1 className="text-lg font-black" style={{ color: '#1A1A1A' }}>Avaliações e comentários</h1>
+      </div>
+      <div className="px-4 pt-4 space-y-3">
+        {isLoading ? (
+          [1,2,3].map(i => (
+            <div key={i} className="bg-white rounded-2xl h-24 animate-pulse" />
+          ))
+        ) : reviews.length === 0 ? (
+          <div className="flex flex-col items-center py-16 gap-2">
+            <Star size={40} color="#D1D5DB" strokeWidth={1.5} />
+            <p className="text-sm font-bold" style={{ color: '#9CA3AF' }}>Ainda não fizeste nenhuma avaliação</p>
+          </div>
+        ) : (
+          reviews.map((r, index) => (
+          <motion.div 
+            key={r.id} 
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: index * 0.1, type: 'spring', stiffness: 200, damping: 20 }}
+            whileHover={{ scale: 1.02, boxShadow: '0 8px 24px rgba(0,0,0,0.12)' }}
+            whileTap={{ scale: 0.98 }} 
+            onClick={() => setSelected(r)}
+            className="bg-white rounded-2xl overflow-hidden shadow-sm cursor-pointer"
+          >
+            <div className="flex gap-3 p-3">
+              <div className="relative flex-shrink-0 overflow-hidden rounded-xl" style={{ width: 72, height: 72 }}>
+                <motion.img 
+                  whileHover={{ scale: 1.1 }}
+                  transition={{ duration: 0.3 }}
+                  src={r.image} 
+                  alt={r.place} 
+                  className="w-full h-full object-cover" 
+                />
+                <span className="absolute bottom-1 left-1 text-[8px] font-bold px-1.5 py-0.5 rounded-full"
+                  style={{ background: r.catColor, color: 'white' }}>{r.category}</span>
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-black mb-1" style={{ color: '#1A1A1A' }}>{r.place}</p>
+                <div className="flex items-center gap-0.5 mb-1">
+                  {[1,2,3,4,5].map(s => (
+                    <motion.div
+                      key={s}
+                      initial={{ scale: 0 }}
+                      animate={{ scale: 1 }}
+                      transition={{ delay: index * 0.1 + s * 0.05 }}
+                    >
+                      <Star size={12} fill={r.rating >= s ? '#FBBF24' : 'none'} stroke={r.rating >= s ? '#FBBF24' : '#D1D5DB'} strokeWidth={1.5} />
+                    </motion.div>
+                  ))}
+                </div>
+                <p className="text-xs leading-snug" style={{ color: '#6B7280' }}>{r.comment}</p>
+                <p className="text-[10px] mt-1" style={{ color: '#C7C7CC' }}>{r.date}</p>
+              </div>
+              <motion.div
+                whileHover={{ x: 4 }}
+                transition={{ type: 'spring', stiffness: 300 }}
+              >
+                <ChevronRight size={16} className="flex-shrink-0 self-center" style={{ color: '#D1D5DB' }} />
+              </motion.div>
+            </div>
+          </motion.div>
+        ))}
+      </div>
+    </motion.div>
+  );
+}
+
+// ── Suggestions screen ────────────────────────────────────────────────────────
+function SuggestionsScreen({ onBack }: { onBack: () => void }) {
+  const [liked, setLiked] = useState<Record<string, boolean>>({});
+  const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [filter, setFilter] = useState<'Todos' | 'Aprovado' | 'Em revisão' | 'Cancelado'>('Todos');
+  const [selected, setSelected] = useState<Suggestion | null>(null);
+
+  useEffect(() => {
+    const load = async () => {
+      try {
+        const { data } = (await localsApi.myLocals?.()) ?? { data: null };
+        const items: any[] = Array.isArray(data) ? data : (data?.results ?? data?.locals ?? []);
+        setSuggestions(items.map((s: any) => ({
+          id: String(s.id),
+          place: s.name || 'Local',
+          desc: s.description || '',
+          status: s.status === 'approved' ? 'Aprovado' : s.status === 'rejected' ? 'Cancelado' : 'Em revisão',
+          date: s.createdAt ? new Date(s.createdAt).toLocaleDateString('pt-PT') : '',
+          image: s.images?.[0]?.url || s.cover_image || '/images/local-1.jpg',
+          category: s.category?.name || s.category || 'Local',
+          catColor: CAT_COLOR[s.category?.name] || CAT_COLOR.default,
+          rating: parseFloat(s.rating?.average ?? 0) || 4.0,
+          reviews: s.rating?.count ?? 0,
+          provincia: s.location?.province || '',
+        })));
+      } catch {
+        setSuggestions([]);
+      } finally { setIsLoading(false); }
+    };
+    load();
+  }, []);
+
+  const statusColor: Record<string, string> = { 'Aprovado': '#1B5E3B', 'Em revisão': '#F4821F', 'Cancelado': '#EF4444' };
+  const statusBg: Record<string, string>    = { 'Aprovado': '#EEF7F0', 'Em revisão': '#FFF3E0', 'Cancelado': '#FEF2F2' };
+  const filters = ['Todos', 'Aprovado', 'Em revisão', 'Cancelado'] as const;
+  const filtered = filter === 'Todos' ? suggestions : suggestions.filter(s => s.status === filter);
+
+  if (selected) {
+    return (
+      <DestinationDetail
+        destination={{ id: selected.id, name: selected.place, category: selected.category, provincia: selected.provincia, desc: selected.desc, image: selected.image, rating: selected.rating, reviews: selected.reviews, melhorEpoca: 'Todo o ano' }}
+        onBack={() => setSelected(null)} onExploreMore={() => setSelected(null)} />
+    );
+  }
+
+  return (
+    <motion.div className="min-h-screen pb-24" style={{ background: '#F5F5F0', fontFamily: 'Nunito, sans-serif' }}
+      initial={{ opacity: 0, x: '100%' }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: '100%' }}
+      transition={{ type: 'spring', damping: 25, stiffness: 200 }}>
+      <div className="bg-white px-4 pt-5 pb-3 sticky top-0 z-10 shadow-sm">
+        <div className="flex items-center gap-3 mb-3">
+          <button onClick={onBack} className="w-9 h-9 rounded-full flex items-center justify-center" style={{ background: '#F3F4F6' }}>
+            <ChevronLeft size={20} strokeWidth={2.5} />
+          </button>
+          <h1 className="text-lg font-black" style={{ color: '#1A1A1A' }}>Meus pontos sugeridos</h1>
+        </div>
+        {/* Filter pills */}
+        <div className="flex gap-2 overflow-x-auto scrollbar-hide pb-1">
+          {filters.map((f, index) => (
+            <motion.button 
+              key={f} 
+              initial={{ opacity: 0, scale: 0.8 }}
+              animate={{ opacity: 1, scale: 1 }}
+              transition={{ delay: index * 0.05 }}
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
+              onClick={() => setFilter(f)}
+              className="px-3 py-1.5 rounded-full text-xs font-bold whitespace-nowrap transition-all"
+              style={{ background: filter === f ? '#1B5E3B' : '#F3F4F6', color: filter === f ? 'white' : '#6B7280' }}
+            >
+              {f}
+            </motion.button>
+          ))}
+        </div>
+      </div>
+      <div className="grid grid-cols-2 gap-3 px-4 pt-4">
+        {isLoading ? (
+          [1,2].map(i => <div key={i} className="bg-white rounded-2xl h-48 animate-pulse" />)
+        ) : filtered.length === 0 ? (
+          <div className="col-span-2 flex flex-col items-center py-16 gap-2">
+            <Send size={40} color="#D1D5DB" strokeWidth={1.5} />
+            <p className="text-sm font-bold" style={{ color: '#9CA3AF' }}>
+              {filter === 'Todos' ? 'Ainda não sugeriste nenhum local' : `Nenhuma sugestão com estado "${filter}"`}
+            </p>
+          </div>
+        ) : (
+          filtered.map((s, index) => (
+          <motion.div 
+            key={s.id} 
+            initial={{ opacity: 0, scale: 0.9 }}
+            animate={{ opacity: 1, scale: 1 }}
+            transition={{ delay: index * 0.08, type: 'spring', stiffness: 200, damping: 15 }}
+            whileHover={{ y: -6, scale: 1.03 }}
+            whileTap={{ scale: 0.97 }} 
+            onClick={() => setSelected(s)}
+            className="bg-white rounded-2xl overflow-hidden shadow-sm cursor-pointer"
+          >
+            <div className="relative overflow-hidden" style={{ height: 160 }}>
+              <motion.img 
+                whileHover={{ scale: 1.15 }}
+                transition={{ duration: 0.4 }}
+                src={s.image} 
+                alt={s.place} 
+                className="w-full h-full object-cover" 
+              />
+              <div className="absolute inset-0" style={{ background: 'linear-gradient(to top, rgba(0,0,0,0.5) 0%, transparent 55%)' }} />
+              <motion.div 
+                initial={{ opacity: 0, x: 10 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ delay: index * 0.08 + 0.1 }}
+                className="absolute top-2 right-2"
+              >
+                <span className="text-[9px] font-bold px-2 py-0.5 rounded-full"
+                  style={{ background: statusBg[s.status], color: statusColor[s.status] }}>{s.status}</span>
+              </motion.div>
+              <motion.div 
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: index * 0.08 + 0.15 }}
+                className="absolute bottom-2 left-2 flex items-center gap-1 px-2 py-1 rounded-full"
+                style={{ background: 'rgba(0,0,0,0.55)', backdropFilter: 'blur(6px)' }}
+              >
+                <Star size={10} fill="#FBBF24" stroke="none" />
+                <span className="text-white text-[10px] font-bold">{s.rating}</span>
+              </motion.div>
+            </div>
+            <div className="p-2.5">
+              <div className="flex items-start justify-between mb-1">
+                <p className="text-xs font-black flex-1 leading-tight" style={{ color: '#1A1A1A' }}>{s.place}</p>
+                <span className="ml-1 text-[8px] font-bold px-1.5 py-0.5 rounded-full flex-shrink-0"
+                  style={{ background: s.catColor + '20', color: s.catColor }}>{s.category}</span>
+              </div>
+              <p className="text-[10px] leading-snug mb-1.5" style={{ color: '#6B7280' }}>{s.desc}</p>
+              <div className="flex items-center justify-between pt-1.5 border-t" style={{ borderColor: '#F3F4F6' }}>
+                <motion.button 
+                  whileHover={{ scale: 1.2 }}
+                  whileTap={{ scale: 0.9 }}
+                  onClick={e => { e.stopPropagation(); setLiked(p => ({ ...p, [s.id]: !p[s.id] })); }}
+                  style={{ color: liked[s.id] ? '#EF4444' : '#9CA3AF' }}
+                >
+                  <motion.div
+                    animate={liked[s.id] ? { scale: [1, 1.3, 1] } : {}}
+                    transition={{ duration: 0.3 }}
+                  >
+                    <Heart size={13} fill={liked[s.id] ? 'currentColor' : 'none'} />
+                  </motion.div>
+                </motion.button>
+                <p className="text-[9px]" style={{ color: '#C7C7CC' }}>{s.date}</p>
+              </div>
+            </div>
+          </motion.div>
+        ))
+        )}
+      </div>
+    </motion.div>
+  );
+}
+
+// ── Destinations screen ───────────────────────────────────────────────────────
+function DestinationsScreen({ onBack }: { onBack: () => void }) {
+  const [liked, setLiked] = useState<Record<string, boolean>>({});
+  const [destinations, setDestinations] = useState<Destination[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [selected, setSelected] = useState<Destination | null>(null);
+
+  useEffect(() => {
+    const load = async () => {
+      try {
+        const { data } = await localsApi.list({ page: 1, limit: 20, sortBy: 'recent' });
+        const items: any[] = Array.isArray(data) ? data : (data?.results ?? data?.locals ?? []);
+        setDestinations(items.map((d: any) => ({
+          id: String(d.id),
+          place: d.name || 'Local',
+          desc: d.description || '',
+          date: d.createdAt ? new Date(d.createdAt).toLocaleDateString('pt-PT') : '',
+          image: d.images?.[0]?.url || d.cover_image || '/images/local-1.jpg',
+          category: d.category?.name || d.category || 'Local',
+          catColor: CAT_COLOR[d.category?.name] || CAT_COLOR.default,
+          rating: parseFloat(d.rating?.average ?? 0) || 4.0,
+          reviews: d.rating?.count ?? 0,
+          provincia: d.location?.province || '',
+        })));
+      } catch {
+        setDestinations([]);
+      } finally { setIsLoading(false); }
+    };
+    load();
+  }, []);
+
+  if (selected) {
+    return (
+      <DestinationDetail
+        destination={{ id: selected.id, name: selected.place, category: selected.category, provincia: selected.provincia, desc: selected.desc, image: selected.image, rating: selected.rating, reviews: selected.reviews, melhorEpoca: 'Todo o ano' }}
+        onBack={() => setSelected(null)} onExploreMore={() => setSelected(null)} />
+    );
+  }
+
+  return (
+    <motion.div className="min-h-screen pb-24" style={{ background: '#F5F5F0', fontFamily: 'Nunito, sans-serif' }}
+      initial={{ opacity: 0, x: '100%' }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: '100%' }}
+      transition={{ type: 'spring', damping: 25, stiffness: 200 }}>
+      <div className="bg-white px-4 pt-5 pb-4 sticky top-0 z-10 shadow-sm flex items-center gap-3">
+        <button onClick={onBack} className="w-9 h-9 rounded-full flex items-center justify-center" style={{ background: '#F3F4F6' }}>
+          <ChevronLeft size={20} strokeWidth={2.5} />
+        </button>
+        <h1 className="text-lg font-black" style={{ color: '#1A1A1A' }}>Destinos explorados</h1>
+      </div>
+      <div className="grid grid-cols-2 gap-3 px-4 pt-4">
+        {isLoading ? (
+          [1,2,3,4].map(i => <div key={i} className="bg-white rounded-2xl h-48 animate-pulse" />)
+        ) : destinations.length === 0 ? (
+          <div className="col-span-2 flex flex-col items-center py-16 gap-2">
+            <Compass size={40} color="#D1D5DB" strokeWidth={1.5} />
+            <p className="text-sm font-bold" style={{ color: '#9CA3AF' }}>Ainda não exploraste nenhum destino</p>
+          </div>
+        ) : (
+          destinations.map((d, index) => (
+          <motion.div
+            key={d.id}
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: index * 0.1, type: 'spring', stiffness: 200, damping: 20 }}
+          >
+            <DestCard 
+              item={d} 
+              liked={liked[d.id]}
+              onLike={() => setLiked(p => ({ ...p, [d.id]: !p[d.id] }))}
+              onClick={() => setSelected(d)} 
+            />
+          </motion.div>
+        ))
+        )}
+      </div>
+    </motion.div>
+  );
+}
+
+// ── Searches screen ───────────────────────────────────────────────────────────
+function SearchesScreen({ onBack }: { onBack: () => void }) {
+  const [openChat, setOpenChat] = useState<string | null>(null);
+
+  if (openChat !== null) {
+    return <Chatbot onBack={() => setOpenChat(null)} initialQuery={openChat} />;
+  }
+
+  return (
+    <motion.div className="min-h-screen pb-24" style={{ background: '#F5F5F0', fontFamily: 'Nunito, sans-serif' }}
+      initial={{ opacity: 0, x: '100%' }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: '100%' }}
+      transition={{ type: 'spring', damping: 25, stiffness: 200 }}>
+      <div className="bg-white px-4 pt-5 pb-4 sticky top-0 z-10 shadow-sm flex items-center gap-3">
+        <button onClick={onBack} className="w-9 h-9 rounded-full flex items-center justify-center" style={{ background: '#F3F4F6' }}>
+          <ChevronLeft size={20} strokeWidth={2.5} />
+        </button>
+        <h1 className="text-lg font-black" style={{ color: '#1A1A1A' }}>Pesquisas recentes (IA)</h1>
+      </div>
+      <div className="px-4 pt-4 space-y-2">
+        {/* Searches são geridas pela IA/Chatbot - não há endpoint de histórico ainda */}
+        <div className="flex flex-col items-center py-16 gap-2">
+          <Search size={40} color="#D1D5DB" strokeWidth={1.5} />
+          <p className="text-sm font-bold" style={{ color: '#9CA3AF' }}>Histórico de pesquisas não disponível</p>
+          <p className="text-xs text-center" style={{ color: '#C7C7CC' }}>As pesquisas são processadas pela IA em tempo real</p>
+        </div>
+      </div>
+    </motion.div>
+  );
+}
+
+// ── Main Profile ──────────────────────────────────────────────────────────────
+export default function Profile({ onSettings, onLogout, onAddPost }: ProfileProps) {
+  const { user, logout } = useAuth();
+  const [communityDismissed, setCommunityDismissed] = useState(false);
+  const [activeScreen, setActiveScreen] = useState<'reviews' | 'suggestions' | 'destinations' | 'searches' | null>(null);
+  const name = user?.name || 'Utilizador';
+
+  // Contadores baseados nos stats do utilizador vindos da API
+  const statsCount = {
+    reviews: user?.stats?.reviewsCount ?? user?.stats?.postsCount ?? 0,
+    suggestions: user?.stats?.localsCount ?? 0,
+    destinations: user?.stats?.followingCount ?? 0,
+    searches: 0,
+  };
+
+  const stats = [
+    { icon: <Star size={20} color="#FBBF24" fill="#FBBF24" strokeWidth={1.5} />, value: statsCount.reviews,     label: 'Avaliações', bg: '#FEF9EC', screen: 'reviews'     as const },
+    { icon: <Send size={20} color="#1B5E3B" strokeWidth={1.8} />,               value: statsCount.suggestions, label: 'Sugestões',  bg: '#EEF7F0', screen: 'suggestions' as const },
+  ];
+
+  const activities = [
+    { icon: <MapPin  size={18} color="#1B5E3B" strokeWidth={1.8} />, bg: '#EEF7F0', title: 'Meus pontos sugeridos',    desc: 'Sugestões enviadas por ti',       screen: 'suggestions'  as const, count: statsCount.suggestions  },
+    { icon: <Compass size={18} color="#2BB5C8" strokeWidth={1.8} />, bg: '#EBF8FB', title: 'Destinos explorados',      desc: 'Lugares que visitaste',           screen: 'destinations' as const, count: statsCount.destinations },
+    { icon: <Search  size={18} color="#6B7280" strokeWidth={1.8} />, bg: '#F3F4F6', title: 'Pesquisas recentes (IA)',  desc: 'Últimas buscas que fizeste',      screen: 'searches'     as const, count: statsCount.searches     },
+    { icon: <Star    size={18} color="#FBBF24" strokeWidth={1.8} />, bg: '#FEF9EC', title: 'Avaliações e comentários', desc: 'O que já avaliaste e comentaste', screen: 'reviews'      as const, count: statsCount.reviews      },
+  ];
+
+  if (activeScreen === 'reviews')      return <ReviewsScreen      onBack={() => setActiveScreen(null)} />;
+  if (activeScreen === 'suggestions')  return <SuggestionsScreen  onBack={() => setActiveScreen(null)} />;
+  if (activeScreen === 'destinations') return <DestinationsScreen onBack={() => setActiveScreen(null)} />;
+  if (activeScreen === 'searches')     return <SearchesScreen     onBack={() => setActiveScreen(null)} />;
+
+  return (
+    <div className="min-h-screen pb-24" style={{ background: '#F5F5F0', fontFamily: 'Nunito, sans-serif' }}>
+      <div className="relative" style={{ height: 200 }}>
+        <img src="/images/local-1.jpg" alt="hero" className="absolute inset-0 w-full h-full object-cover" />
+        <div className="absolute inset-0" style={{ background: 'linear-gradient(to bottom, rgba(0,0,0,0.15) 0%, rgba(0,0,0,0.45) 100%)' }} />
+        <div className="absolute top-4 right-4">
+          <button onClick={onSettings} className="w-10 h-10 bg-white/20 backdrop-blur-sm rounded-full flex items-center justify-center border border-white/30">
+            <Settings size={20} className="text-white" strokeWidth={1.8} />
+          </button>
+        </div>
+        <div className="absolute bottom-0 left-0 right-0 px-5 pb-4 flex items-end gap-4">
+          <div className="relative flex-shrink-0">
+            <div className="w-20 h-20 rounded-full overflow-hidden shadow-xl" style={{ border: '3px solid white' }}>
+              {user?.avatar ? <img src={user.avatar} alt={name} className="w-full h-full object-cover" />
+                : <div className="w-full h-full bg-gradient-to-br from-[#2BB5C8] to-[#1B5E3B] flex items-center justify-center">
+                    <span className="text-2xl font-black text-white">{name.charAt(0).toUpperCase()}</span>
+                  </div>}
+            </div>
+            <button className="absolute -bottom-1 -right-1 w-7 h-7 bg-white rounded-full flex items-center justify-center shadow-md border border-gray-100">
+              <Camera size={14} className="text-gray-600" strokeWidth={1.8} />
+            </button>
+          </div>
+          <div className="pb-1">
+            <h1 className="text-xl font-black text-white leading-tight">{name}</h1>
+            <p className="text-white/70 text-xs mt-0.5">{user?.email || ''}</p>
+          </div>
+        </div>
+      </div>
+
+      <div className="max-w-5xl mx-auto md:grid md:grid-cols-2 md:gap-6 md:px-6 md:pt-6 px-4 pt-0">
+        <div>
+          <div className="-mt-1 grid grid-cols-2 gap-3 mb-5">
+            {stats.map((s, i) => (
+              <motion.button 
+                key={i} 
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: i * 0.1, type: 'spring', stiffness: 200, damping: 20 }}
+                whileHover={{ scale: 1.03, y: -2 }}
+                whileTap={{ scale: 0.97 }}
+                onClick={() => setActiveScreen(s.screen)}
+                className="bg-white rounded-2xl shadow-md p-4 cursor-pointer group text-left"
+              >
+                <div className="flex items-center gap-3">
+                  <motion.div 
+                    whileHover={{ scale: 1.15, rotate: 5 }}
+                    transition={{ type: 'spring', stiffness: 300 }}
+                    className="w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0" 
+                    style={{ background: s.bg }}
+                  >
+                    {s.icon}
+                  </motion.div>
+                  <div className="flex-1">
+                    <motion.div 
+                      initial={{ scale: 0 }}
+                      animate={{ scale: 1 }}
+                      transition={{ delay: i * 0.1 + 0.2, type: 'spring', stiffness: 200 }}
+                      className="text-2xl font-black leading-none mb-1" 
+                      style={{ color: '#1A1A1A' }}
+                    >
+                      {s.value}
+                    </motion.div>
+                    <div className="text-xs font-semibold" style={{ color: '#9CA3AF' }}>{s.label}</div>
+                  </div>
+                </div>
+              </motion.button>
+            ))}
+          </div>
+          {!communityDismissed && (
+            <motion.div 
+              initial={{ opacity: 0, y: 20, scale: 0.95 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95, height: 0 }}
+              transition={{ type: 'spring', stiffness: 200, damping: 20 }}
+              className="mb-5 rounded-2xl overflow-hidden relative" 
+              style={{ background: '#EEF7F0' }}
+            >
+              <motion.button 
+                whileHover={{ scale: 1.1, rotate: 90 }}
+                whileTap={{ scale: 0.9 }}
+                onClick={() => setCommunityDismissed(true)} 
+                className="absolute top-3 right-3 w-7 h-7 rounded-full flex items-center justify-center" 
+                style={{ background: '#D1E8D8' }}
+              >
+                <X size={14} style={{ color: '#1B5E3B' }} strokeWidth={2} />
+              </motion.button>
+              <div className="flex items-center gap-3 p-4 pr-10">
+                <motion.div 
+                  animate={{ scale: [1, 1.05, 1] }}
+                  transition={{ repeat: Infinity, duration: 2, ease: 'easeInOut' }}
+                  className="w-12 h-12 rounded-2xl flex items-center justify-center flex-shrink-0" 
+                  style={{ background: '#1B5E3B' }}
+                >
+                  <Users size={24} className="text-white" strokeWidth={1.8} />
+                </motion.div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-black" style={{ color: '#1A1A1A' }}>Faz parte da comunidade Txopela!</p>
+                  <p className="text-xs leading-snug mt-0.5" style={{ color: '#4B7A5E' }}>A tua contribuição ajuda a tornar Moçambique mais incrível para todos.</p>
+                </div>
+                <motion.button 
+                  whileHover={{ scale: 1.05 }}
+                  whileTap={{ scale: 0.95 }} 
+                  onClick={onAddPost} 
+                  className="flex-shrink-0 px-4 py-2.5 rounded-xl text-white text-sm font-black shadow" 
+                  style={{ background: '#1B5E3B' }}
+                >
+                  Sugerir
+                </motion.button>
+              </div>
+            </motion.div>
+          )}
+        </div>
+        <div>
+          <div className="mb-5 md:mt-0 mt-2 grid grid-cols-1 gap-3">
+            {activities.map((act, i) => (
+              <motion.button 
+                key={i} 
+                initial={{ opacity: 0, x: 20 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ delay: i * 0.1, type: 'spring', stiffness: 200, damping: 20 }}
+                whileHover={{ scale: 1.02, x: 4 }}
+                whileTap={{ scale: 0.98 }}
+                onClick={() => setActiveScreen(act.screen)}
+                className="relative overflow-hidden rounded-2xl shadow-sm text-left group" 
+                style={{ background: act.bg }}
+              >
+                <motion.div 
+                  className="absolute inset-0 bg-gradient-to-br from-white/0 to-black/5" 
+                  initial={{ opacity: 0 }}
+                  whileHover={{ opacity: 1 }}
+                  transition={{ duration: 0.3 }}
+                />
+                <div className="relative flex items-center gap-4 p-4">
+                  <motion.div 
+                    whileHover={{ scale: 1.1, rotate: 5 }}
+                    transition={{ type: 'spring', stiffness: 300 }}
+                    className="w-14 h-14 rounded-2xl flex items-center justify-center flex-shrink-0 shadow-sm bg-white"
+                  >
+                    <div className="scale-110">{act.icon}</div>
+                  </motion.div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-black mb-0.5" style={{ color: '#1A1A1A' }}>{act.title}</p>
+                    <p className="text-xs" style={{ color: '#6B7280' }}>{act.desc}</p>
+                  </div>
+                  <div className="flex items-center gap-2 flex-shrink-0">
+                    <motion.span 
+                      initial={{ scale: 0 }}
+                      animate={{ scale: 1 }}
+                      transition={{ delay: i * 0.1 + 0.2, type: 'spring', stiffness: 200 }}
+                      className="text-xs font-black px-2 py-0.5 rounded-full bg-white/80" 
+                      style={{ color: '#1A1A1A' }}
+                    >
+                      {act.count}
+                    </motion.span>
+                    <motion.div
+                      whileHover={{ x: 4 }}
+                      transition={{ type: 'spring', stiffness: 300 }}
+                    >
+                      <ChevronRight size={18} style={{ color: '#9CA3AF' }} strokeWidth={2} />
+                    </motion.div>
+                  </div>
+                </div>
+              </motion.button>
+            ))}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
