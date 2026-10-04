@@ -8,31 +8,26 @@
  *
  * ESTADO ABERTO (resumo desaparece, seta no cabeçalho fecha):
  *   📍 Localização                            ˄
- *   ───────────────────────────────────────────
  *   PAÍS          Moçambique
  *   PROVÍNCIA     Inhambane
- *   DISTRITO      Vilankulo
- *   POSTO ADM.    Mapinhane
- *   CIDADE/VILA   Muabsa
- *   ENDEREÇO      Muabsa, Mapinhane, Vilankulo, Inhambane
+ *   ...
  *
  * REGRAS:
  * - Campos vazios são omitidos silenciosamente.
  * - Se não houver nenhum campo, retorna null.
+ * - "Como chegar" foi removido — existe div dedicada em cada detalhe.
+ * - "Localização" sempre alinhado à esquerda.
  */
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { MapPin, Navigation, ChevronDown, ChevronUp } from 'lucide-react';
+import { MapPin, ChevronDown, ChevronUp } from 'lucide-react';
 import { buildFullAddress } from '@/utils/normalizeLocation';
 import type { NormalizedLocation } from '@/utils/normalizeLocation';
 
 // ─── Tipos ────────────────────────────────────────────────────────────────────
 
 interface LocationCardProps {
-  /** Objecto normalizado — fonte preferida. */
   data?: NormalizedLocation;
-
-  /** Fallback: props individuais (quando `data` não é passado). */
   country?:            string;
   province?:           string;
   district?:           string;
@@ -42,19 +37,14 @@ interface LocationCardProps {
   address?:            string;
   lat?:                number;
   lng?:                number;
-
-  /** Visual */
   size?:  'sm' | 'md';
   title?: string;
-
-  /** Mostra botão "Como chegar". Só aparece se lat+lng disponíveis ou publicationName definido. */
+  /** Mantido por compatibilidade mas ignorado — botão removido */
   showMap?: boolean;
-
-  /** Nome da publicação — fallback na query do Google Maps. */
   publicationName?: string;
 }
 
-// ─── Componente principal ─────────────────────────────────────────────────────
+// ─── Componente ───────────────────────────────────────────────────────────────
 
 export default function LocationCard({
   data,
@@ -65,16 +55,11 @@ export default function LocationCard({
   locality:           propLocality,
   nearbyReference:    propNearby,
   address:            propAddress,
-  lat:                propLat,
-  lng:                propLng,
   size = 'md',
   title = 'Localização',
-  showMap = false,
-  publicationName,
 }: LocationCardProps) {
   const [open, setOpen] = useState(false);
 
-  // Resolver valores — data tem precedência, props individuais são fallback
   const country            = (data?.country            ?? propCountry   ?? 'Moçambique').trim();
   const province           = (data?.province           ?? propProvince  ?? '').trim();
   const district           = (data?.district           ?? propDistrict  ?? '').trim();
@@ -82,15 +67,20 @@ export default function LocationCard({
   const locality           = (data?.locality           ?? propLocality  ?? '').trim();
   const nearbyReference    = (data?.nearbyReference    ?? propNearby    ?? '').trim();
   const address            = (data?.address            ?? propAddress   ?? '').trim();
-  const lat                = data?.lat ?? propLat;
-  const lng                = data?.lng ?? propLng;
 
-  // Campos expandidos — hierarquia completa, sem vazios
   const fields: { label: string; value: string }[] = [
     { label: 'País',                 value: country },
     { label: 'Província',            value: province },
     { label: 'Distrito',             value: district },
-    { label: 'Posto Administrativo', value: administrativePost },
+    // Posto Administrativo só aparece se for diferente de province e district
+    // (evita duplicar quando é o mesmo nome, ex: "Inhambane" que é cidade/província/distrito)
+    {
+      label: 'Posto Administrativo',
+      value: (administrativePost &&
+        administrativePost.toLowerCase() !== province.toLowerCase() &&
+        administrativePost.toLowerCase() !== district.toLowerCase()
+      ) ? administrativePost : '',
+    },
     { label: 'Cidade/Vila',          value: locality },
     { label: 'Perto de',             value: nearbyReference },
     { label: 'Endereço',             value: address },
@@ -98,7 +88,6 @@ export default function LocationCard({
 
   if (fields.length === 0) return null;
 
-  // Resumo para o estado fechado
   const summary =
     address ||
     buildFullAddress({ locality, administrativePost, district, province }) ||
@@ -109,26 +98,12 @@ export default function LocationCard({
   const py   = isSm ? 8  : 10;
   const fs   = isSm ? 12 : 13;
   const fsl  = isSm ?  9 : 10;
-
-  const hasCoords  = lat != null && lng != null;
-  const canShowMap = showMap && (hasCoords || !!publicationName);
-
-  const handleMapsClick = () => {
-    const url = hasCoords
-      ? `https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}`
-      : `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(
-          [publicationName, province, 'Moçambique'].filter(Boolean).join(' ')
-        )}`;
-    window.open(url, '_blank', 'noopener,noreferrer');
-  };
-
-  const radius = isSm ? 12 : 16;
   const border = '1px solid #F3F4F6';
 
   return (
     <div style={{
       background: 'white',
-      borderRadius: radius,
+      borderRadius: isSm ? 12 : 16,
       overflow: 'hidden',
       border,
       boxShadow: '0 1px 4px rgba(0,0,0,0.05)',
@@ -137,7 +112,6 @@ export default function LocationCard({
 
       {/* ── Cabeçalho ─────────────────────────────────────────────────── */}
       {open ? (
-        /* Aberto: cabeçalho clicável com ˄ para fechar */
         <button
           type="button"
           onClick={() => setOpen(false)}
@@ -151,18 +125,18 @@ export default function LocationCard({
             borderBottom: border,
             cursor: 'pointer',
             border: 'none',
-            borderBottom: border,
+            textAlign: 'left',
           }}
         >
           <MapPin size={isSm ? 13 : 15} color="#1B5E3B" />
-          <span style={{ flex: 1, fontSize: isSm ? 11 : 13, fontWeight: 900, color: '#1A1A1A' }}>
+          <span style={{ flex: 1, fontSize: isSm ? 11 : 13, fontWeight: 900, color: '#1A1A1A', textAlign: 'left' }}>
             {title}
           </span>
           <ChevronUp size={isSm ? 14 : 16} color="#1B5E3B" />
         </button>
       ) : (
-        /* Fechado: cabeçalho fixo + linha de resumo clicável */
         <>
+          {/* Cabeçalho fixo — sempre à esquerda */}
           <div style={{
             display: 'flex',
             alignItems: 'center',
@@ -170,6 +144,7 @@ export default function LocationCard({
             padding: `${py}px ${px}px`,
             background: '#FAFAFA',
             borderBottom: border,
+            textAlign: 'left',
           }}>
             <MapPin size={isSm ? 13 : 15} color="#1B5E3B" />
             <span style={{ flex: 1, fontSize: isSm ? 11 : 13, fontWeight: 900, color: '#1A1A1A' }}>
@@ -194,7 +169,7 @@ export default function LocationCard({
               textAlign: 'left',
             }}
           >
-            <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ flex: 1, minWidth: 0, textAlign: 'left' }}>
               <p style={{
                 margin: 0,
                 fontSize: fsl,
@@ -233,10 +208,10 @@ export default function LocationCard({
             animate={{ height: 'auto', opacity: 1 }}
             exit={{ height: 0, opacity: 0 }}
             transition={{ duration: 0.22, ease: 'easeInOut' }}
-            style={{ overflow: 'hidden' }}
+            style={{ overflow: 'hidden', textAlign: 'left' }}
           >
             {fields.map((f, i) => (
-              <div key={f.label} style={{ borderTop: i === 0 ? border : border, padding: `${py}px ${px}px` }}>
+              <div key={f.label} style={{ borderTop: border, padding: `${py}px ${px}px` }}>
                 <p style={{
                   margin: 0,
                   fontSize: fsl,
@@ -259,31 +234,6 @@ export default function LocationCard({
                 </p>
               </div>
             ))}
-
-            {/* Botão "Como chegar" — opcional */}
-            {canShowMap && (
-              <div style={{ padding: `${py}px ${px}px`, borderTop: border }}>
-                <button
-                  onClick={handleMapsClick}
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 6,
-                    background: '#EEF7F0',
-                    border: '1px solid #1B5E3B20',
-                    borderRadius: 8,
-                    padding: '7px 12px',
-                    cursor: 'pointer',
-                    fontSize: isSm ? 11 : 12,
-                    fontWeight: 800,
-                    color: '#1B5E3B',
-                  }}
-                >
-                  <Navigation size={13} color="#1B5E3B" />
-                  Como chegar
-                </button>
-              </div>
-            )}
           </motion.div>
         )}
       </AnimatePresence>

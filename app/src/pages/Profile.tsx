@@ -1,5 +1,7 @@
 ﻿import { useState, useEffect, useCallback } from 'react';
 import { PLACEHOLDER_IMAGE, extractImages } from '@/utils/dataValidation';
+import { translateLocalCategory, translateServiceCategory, translatePostCategory } from '@/utils/translations';
+import { useTheme } from '@/context/ThemeContext';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Settings, Camera, ChevronRight, X, ChevronLeft,
@@ -43,83 +45,97 @@ const CAT_COLOR: Record<string, string> = {
   Gastronomia: '#E05A3A', Aventura: '#F4821F', default: '#6B7280',
 };
 
-// -- Destination card ---------------------------------------------------------
+// -- Destination card — mesmo padrão dos cards de Descobertas ----------------
 function DestCard({ item, onLike, liked, onClick }: {
   item: Destination; onLike?: () => void; liked?: boolean; onClick?: () => void;
 }) {
+  const [suggested, setSuggested] = useState(false);
+  const { isDark } = useTheme();
   return (
-    <motion.div 
-      whileHover={{ y: -4, scale: 1.02 }}
+    <motion.div
       whileTap={{ scale: 0.98 }}
-      transition={{ duration: 0.2, ease: 'easeOut' }}
-      className="bg-white rounded-2xl overflow-hidden shadow-sm cursor-pointer" 
+      className="rounded-3xl overflow-hidden shadow-sm cursor-pointer"
+      style={{ background: isDark ? '#1A1D27' : '#ffffff' }}
       onClick={onClick}
     >
-      <div className="relative overflow-hidden" style={{ height: 180 }}>
-        <motion.img 
-          whileHover={{ scale: 1.1 }}
-          transition={{ duration: 0.4 }}
-          src={item.image} 
-          alt={item.place} 
-          className="w-full h-full object-cover" 
+      {/* Imagem */}
+      <div className="relative" style={{ height: 200 }}>
+        <img
+          src={item.image}
+          alt={item.place}
+          className="w-full h-full object-cover"
+          onError={e => { (e.target as HTMLImageElement).src = PLACEHOLDER_IMAGE; }}
         />
-        <div className="absolute inset-0" style={{ background: 'linear-gradient(to top, rgba(0,0,0,0.5) 0%, transparent 55%)' }} />
-        <motion.div 
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.1 }}
-          className="absolute bottom-3 left-3 flex items-center gap-1 px-2 py-1 rounded-full"
-          style={{ background: 'rgba(0,0,0,0.55)', backdropFilter: 'blur(6px)' }}
-        >
-          <Star size={11} fill="#FBBF24" stroke="none" />
-          <span className="text-white text-xs font-bold">{item.rating}</span>
-          <span className="text-white/70 text-[10px]">({item.reviews})</span>
-        </motion.div>
-      </div>
-      <div className="p-3">
-        <div className="flex items-start justify-between mb-1">
-          <p className="text-sm font-black leading-tight flex-1" style={{ color: '#1A1A1A' }}>{item.place}</p>
-          <span className="ml-2 text-[9px] font-bold px-2 py-0.5 rounded-full flex-shrink-0"
-            style={{ background: item.catColor + '20', color: item.catColor }}>{item.category}</span>
+        <div className="absolute inset-0"
+          style={{ background: 'linear-gradient(to top, rgba(0,0,0,0.4) 0%, transparent 50%)' }} />
+        {/* Rating pill */}
+        <div className="absolute bottom-3 left-3 flex items-center gap-1 px-2.5 py-1.5 rounded-full"
+          style={{ background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(8px)' }}>
+          <Star size={12} fill={item.rating > 0 ? '#FBBF24' : 'none'} stroke={item.rating > 0 ? 'none' : '#9CA3AF'} />
+          <span className="text-white text-xs font-bold">
+            {item.rating > 0 ? item.rating.toFixed(1) : 'Novo'}
+          </span>
+          {item.rating > 0 && <span className="text-white/80 text-[10px]">({item.reviews})</span>}
         </div>
-        <p className="text-[11px] leading-snug mb-2.5" style={{ color: '#6B7280' }}>{item.desc}</p>
-        <div className="flex items-center justify-between pt-2 border-t" style={{ borderColor: '#F3F4F6' }}>
-          <div className="flex items-center gap-3">
-            <motion.button 
-              whileHover={{ scale: 1.2 }}
-              whileTap={{ scale: 0.9 }}
-              onClick={e => { e.stopPropagation(); onLike?.(); }} 
-              style={{ color: liked ? '#EF4444' : '#9CA3AF' }}
+        {/* Badge categoria — top-left */}
+        {item.category && (
+          <span className="absolute top-3 left-3 text-[9px] font-bold px-2 py-0.5 rounded-full text-white"
+            style={{ background: item.catColor || '#1B5E3B' }}>
+            {translateLocalCategory(item.category)}
+          </span>
+        )}
+      </div>
+
+      {/* Conteúdo */}
+      <div className="p-2.5 text-left">
+        <div className="flex items-start justify-between mb-1">
+          <h3 className="text-sm font-black leading-tight flex-1" style={{ color: '#1A1A1A' }}>{item.place}</h3>
+          {item.provincia && (
+            <span className="ml-2 text-[9px] font-bold px-2 py-0.5 rounded-full flex-shrink-0"
+              style={{ background: (item.catColor || '#1B5E3B') + '18', color: item.catColor || '#1B5E3B' }}>
+              {item.provincia}
+            </span>
+          )}
+        </div>
+        {/* Acções */}
+        <div className="flex items-center justify-between pt-1 border-t" style={{ borderColor: isDark ? 'rgba(255,255,255,0.08)' : '#F3F4F6' }}>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={e => { e.stopPropagation(); onLike?.(); }}
+              style={{ color: liked ? '#0EA5E9' : '#9CA3AF' }}
             >
-              <motion.div
-                animate={liked ? { scale: [1, 1.3, 1] } : {}}
-                transition={{ duration: 0.2, ease: 'easeOut' }}
-              >
-                <Heart size={15} fill={liked ? 'currentColor' : 'none'} />
-              </motion.div>
-            </motion.button>
-            <motion.button 
-              whileHover={{ scale: 1.05 }}
-              whileTap={{ scale: 0.95 }}
-              className="flex items-center gap-1" 
-              style={{ color: '#9CA3AF' }} 
-              onClick={e => e.stopPropagation()}
+              <Heart size={13} fill={liked ? 'currentColor' : 'none'} />
+            </button>
+            <button
+              className="flex items-center gap-0.5 transition-colors"
+              style={{ color: suggested ? '#1B5E3B' : '#9CA3AF' }}
+              onClick={async e => {
+                e.stopPropagation();
+                const title = item.place;
+                const text  = `${item.place} — Txopela Tour`;
+                const url   = window.location.origin;
+                try {
+                  if (navigator.share) await navigator.share({ title, text, url });
+                  else await navigator.clipboard.writeText(`${title}\n${text}\n${url}`);
+                  setSuggested(true);
+                  setTimeout(() => setSuggested(false), 2000);
+                } catch { /* cancelado */ }
+              }}
             >
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="M22 2L11 13"/><path d="M22 2L15 22 11 13 2 9l20-7z"/>
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none"
+                stroke={suggested ? '#1B5E3B' : 'currentColor'} strokeWidth="2">
+                <path d="M22 2L11 13" /><path d="M22 2L15 22 11 13 2 9l20-7z" />
               </svg>
-              <span className="text-[10px] font-semibold">Sugerir</span>
-            </motion.button>
+              <span className="text-[9px] font-semibold">{suggested ? 'Sugerido!' : 'Sugerir'}</span>
+            </button>
           </div>
-          <motion.button 
-            whileHover={{ scale: 1.05 }}
-            whileTap={{ scale: 0.95 }}
-            className="px-3 py-1.5 rounded-xl text-[10px] font-bold text-white" 
+          <button
+            className="px-2.5 py-1 rounded-lg text-[9px] font-bold text-white"
             style={{ background: '#1B5E3B' }}
             onClick={e => { e.stopPropagation(); onClick?.(); }}
           >
             Ver detalhes
-          </motion.button>
+          </button>
         </div>
       </div>
     </motion.div>
@@ -131,6 +147,16 @@ function ReviewsScreen({ onBack }: { onBack: () => void }) {
   const [reviews, setReviews] = useState<Review[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [selected, setSelected] = useState<Review | null>(null);
+  const { isDark } = useTheme();
+  const dm = {
+    bg:      isDark ? '#0F1117' : '#F5F5F0',
+    surface: isDark ? '#1A1D27' : '#ffffff',
+    border:  isDark ? 'rgba(255,255,255,0.07)' : '#F3F4F6',
+    text:    isDark ? '#F0F4FF' : '#1A1A1A',
+    text2:   isDark ? '#6B7A99' : '#9CA3AF',
+    back:    isDark ? '#22263A' : '#F3F4F6',
+    skel:    isDark ? '#22263A' : '#E5E7EB',
+  };
 
   useEffect(() => {
     const load = async () => {
@@ -144,7 +170,7 @@ function ReviewsScreen({ onBack }: { onBack: () => void }) {
           comment: r.comment || r.text || '',
           date: r.createdAt ? new Date(r.createdAt).toLocaleDateString('pt-PT') : '',
           image: extractImages(r.local)[0] ?? PLACEHOLDER_IMAGE,
-          category: r.local?.category?.name || r.category || 'Local',
+          category: translateLocalCategory(r.local?.category?.name || r.category || ''),
           catColor: CAT_COLOR[r.local?.category?.name] || CAT_COLOR.default,
           desc: r.local?.description || '',
           provincia: r.local?.location?.province || '',
@@ -179,22 +205,25 @@ function ReviewsScreen({ onBack }: { onBack: () => void }) {
   return (
     <motion.div 
       className="min-h-screen pb-24" 
-      style={{ background: '#F5F5F0', fontFamily: 'Nunito, sans-serif' }}
+      style={{ background: dm.bg, fontFamily: 'Nunito, sans-serif' }}
       initial={{ opacity: 0, y: 10 }} 
       animate={{ opacity: 1, y: 0 }} 
       exit={{ opacity: 0, y: 6 }}
       transition={{ duration: 0.2, ease: 'easeOut' }}
     >
-      <div className="bg-white px-4 pt-5 pb-4 sticky top-0 z-10 shadow-sm flex items-center gap-3">
-        <button onClick={onBack} className="w-9 h-9 rounded-full flex items-center justify-center" style={{ background: '#F3F4F6' }}>
-          <ChevronLeft size={20} strokeWidth={2.5} />
+      <div className="px-4 pt-5 pb-4 sticky top-0 z-10 shadow-sm flex items-center gap-3"
+        style={{ background: dm.surface, borderBottom: `1px solid ${dm.border}` }}>
+        <button onClick={onBack} className="w-9 h-9 rounded-full flex items-center justify-center"
+          style={{ background: dm.back }}>
+          <ChevronLeft size={20} strokeWidth={2.5} style={{ color: dm.text }} />
         </button>
-        <h1 className="text-lg font-black" style={{ color: '#1A1A1A' }}>Avalia��es e coment�rios</h1>
+        <h1 className="text-lg font-black" style={{ color: dm.text }}>Avaliações e comentários</h1>
       </div>
       <div className="px-4 pt-4 space-y-3">
         {isLoading ? (
           [1,2,3].map(i => (
-            <div key={i} className="bg-white rounded-2xl h-24 animate-pulse" />
+            <div key={i} className="rounded-2xl h-24 animate-pulse"
+              style={{ background: dm.surface }} />
           ))
         ) : reviews.length === 0 ? (
           <div className="flex flex-col items-center py-16 gap-2">
@@ -211,7 +240,8 @@ function ReviewsScreen({ onBack }: { onBack: () => void }) {
               whileHover={{ scale: 1.02, boxShadow: '0 8px 24px rgba(0,0,0,0.12)' }}
               whileTap={{ scale: 0.98 }}
               onClick={() => setSelected(r)}
-              className="bg-white rounded-2xl overflow-hidden shadow-sm cursor-pointer"
+              className="rounded-2xl overflow-hidden shadow-sm cursor-pointer"
+              style={{ background: dm.surface }}
             >
               <div className="flex gap-3 p-3">
                 <div className="relative flex-shrink-0 overflow-hidden rounded-xl" style={{ width: 72, height: 72 }}>
@@ -223,7 +253,7 @@ function ReviewsScreen({ onBack }: { onBack: () => void }) {
                     className="w-full h-full object-cover"
                   />
                   <span className="absolute bottom-1 left-1 text-[8px] font-bold px-1.5 py-0.5 rounded-full"
-                    style={{ background: r.catColor, color: 'white' }}>{r.category}</span>
+                    style={{ background: r.catColor, color: 'white' }}>{translateLocalCategory(r.category)}</span>
                 </div>
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-black mb-1" style={{ color: '#1A1A1A' }}>{r.place}</p>
@@ -257,9 +287,125 @@ function ReviewsScreen({ onBack }: { onBack: () => void }) {
   );
 }
 
+// -- Suggestion card — mesmo padrão dos cards de Descobertas -----------------
+function SuggestionCard({ item, index, liked, onLike, onClick, statusColor, statusBg }: {
+  item: Suggestion;
+  index: number;
+  liked: boolean;
+  onLike: () => void;
+  onClick: () => void;
+  statusColor: Record<string, string>;
+  statusBg: Record<string, string>;
+}) {
+  const [suggested, setSuggested] = useState(false);
+  const { isDark } = useTheme();
+  return (
+    <motion.div
+      initial={{ opacity: 0, scale: 0.9 }}
+      animate={{ opacity: 1, scale: 1 }}
+      transition={{ delay: index * 0.08, type: 'spring', stiffness: 200, damping: 15 }}
+      whileTap={{ scale: 0.98 }}
+      onClick={onClick}
+      className="rounded-3xl overflow-hidden shadow-sm cursor-pointer"
+      style={{ background: isDark ? '#1A1D27' : '#ffffff' }}
+    >
+      {/* Imagem */}
+      <div className="relative" style={{ height: 200 }}>
+        <img
+          src={item.image || PLACEHOLDER_IMAGE}
+          alt={item.place}
+          className="w-full h-full object-cover"
+          onError={e => { (e.target as HTMLImageElement).src = PLACEHOLDER_IMAGE; }}
+        />
+        <div className="absolute inset-0"
+          style={{ background: 'linear-gradient(to top, rgba(0,0,0,0.4) 0%, transparent 50%)' }} />
+        {/* Rating pill */}
+        <div className="absolute bottom-3 left-3 flex items-center gap-1 px-2.5 py-1.5 rounded-full"
+          style={{ background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(8px)' }}>
+          <Star size={12} fill={item.rating > 0 ? '#FBBF24' : 'none'} stroke={item.rating > 0 ? 'none' : '#9CA3AF'} />
+          <span className="text-white text-xs font-bold">
+            {item.rating > 0 ? item.rating.toFixed(1) : 'Novo'}
+          </span>
+          {item.rating > 0 && <span className="text-white/80 text-[10px]">({item.reviews})</span>}
+        </div>
+        {/* Badge de status — top-left */}
+        <span
+          className="absolute top-3 left-3 text-[9px] font-bold px-2 py-0.5 rounded-full"
+          style={{ background: statusBg[item.status] || '#F3F4F6', color: statusColor[item.status] || '#6B7280' }}
+        >
+          {item.status}
+        </span>
+      </div>
+
+      {/* Conteúdo */}
+      <div className="p-2.5 text-left">
+        <div className="flex items-start justify-between mb-1">
+          <h3 className="text-sm font-black leading-tight flex-1" style={{ color: '#1A1A1A' }}>{item.place}</h3>
+          {item.provincia && (
+            <span className="ml-2 text-[9px] font-bold px-2 py-0.5 rounded-full flex-shrink-0"
+              style={{ background: (item.catColor || '#1B5E3B') + '18', color: item.catColor || '#1B5E3B' }}>
+              {item.provincia}
+            </span>
+          )}
+        </div>
+        {/* Acções */}
+        <div className="flex items-center justify-between pt-1 border-t" style={{ borderColor: isDark ? 'rgba(255,255,255,0.08)' : '#F3F4F6' }}>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={e => { e.stopPropagation(); onLike(); }}
+              style={{ color: liked ? '#0EA5E9' : '#9CA3AF' }}
+            >
+              <Heart size={13} fill={liked ? 'currentColor' : 'none'} />
+            </button>
+            <button
+              className="flex items-center gap-0.5 transition-colors"
+              style={{ color: suggested ? '#1B5E3B' : '#9CA3AF' }}
+              onClick={async e => {
+                e.stopPropagation();
+                const title = item.place;
+                const text  = `${item.place} — Txopela Tour`;
+                const url   = window.location.origin;
+                try {
+                  if (navigator.share) await navigator.share({ title, text, url });
+                  else await navigator.clipboard.writeText(`${title}\n${text}\n${url}`);
+                  setSuggested(true);
+                  setTimeout(() => setSuggested(false), 2000);
+                } catch { /* cancelado */ }
+              }}
+            >
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none"
+                stroke={suggested ? '#1B5E3B' : 'currentColor'} strokeWidth="2">
+                <path d="M22 2L11 13" /><path d="M22 2L15 22 11 13 2 9l20-7z" />
+              </svg>
+              <span className="text-[9px] font-semibold">{suggested ? 'Sugerido!' : 'Sugerir'}</span>
+            </button>
+          </div>
+          <button
+            className="px-2.5 py-1 rounded-lg text-[9px] font-bold text-white"
+            style={{ background: '#1B5E3B' }}
+            onClick={e => { e.stopPropagation(); onClick(); }}
+          >
+            Ver detalhes
+          </button>
+        </div>
+      </div>
+    </motion.div>
+  );
+}
+
 // -- Suggestions screen --------------------------------------------------------
 function SuggestionsScreen({ onBack }: { onBack: () => void }) {
   const { user } = useAuth();
+  const { isDark } = useTheme();
+  const dm = {
+    bg:      isDark ? '#0F1117' : '#F5F5F0',
+    surface: isDark ? '#1A1D27' : '#ffffff',
+    border:  isDark ? 'rgba(255,255,255,0.07)' : '#F3F4F6',
+    text:    isDark ? '#F0F4FF' : '#1A1A1A',
+    text2:   isDark ? '#6B7A99' : '#9CA3AF',
+    back:    isDark ? '#22263A' : '#F3F4F6',
+    skel:    isDark ? '#22263A' : '#E5E7EB',
+  };
   const [liked, setLiked] = useState<Record<string, boolean>>({});
   const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -315,21 +461,23 @@ function SuggestionsScreen({ onBack }: { onBack: () => void }) {
   }
 
   return (
-    <motion.div className="min-h-screen pb-24" style={{ background: '#F5F5F0', fontFamily: 'Nunito, sans-serif' }}
+    <motion.div className="min-h-screen pb-24" style={{ background: dm.bg, fontFamily: 'Nunito, sans-serif' }}
       initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 6 }}
       transition={{ duration: 0.2, ease: 'easeOut' }}>
-      <div className="bg-white px-4 pt-5 pb-3 sticky top-0 z-10 shadow-sm">
+      <div className="px-4 pt-5 pb-3 sticky top-0 z-10 shadow-sm"
+        style={{ background: dm.surface, borderBottom: `1px solid ${dm.border}` }}>
         <div className="flex items-center gap-3 mb-3">
-          <button onClick={onBack} className="w-9 h-9 rounded-full flex items-center justify-center" style={{ background: '#F3F4F6' }}>
-            <ChevronLeft size={20} strokeWidth={2.5} />
+          <button onClick={onBack} className="w-9 h-9 rounded-full flex items-center justify-center"
+            style={{ background: dm.back }}>
+            <ChevronLeft size={20} strokeWidth={2.5} style={{ color: dm.text }} />
           </button>
-          <h1 className="text-lg font-black" style={{ color: '#1A1A1A' }}>Meus pontos sugeridos</h1>
+          <h1 className="text-lg font-black" style={{ color: dm.text }}>Meus pontos sugeridos</h1>
         </div>
         <div className="flex gap-2 overflow-x-auto pb-1">
           {filters.map(f => (
             <motion.button key={f} whileTap={{ scale: 0.95 }} onClick={() => setFilter(f)}
               className="px-3 py-1.5 rounded-full text-xs font-bold whitespace-nowrap"
-              style={{ background: filter === f ? '#1B5E3B' : '#F3F4F6', color: filter === f ? 'white' : '#6B7280' }}>
+              style={{ background: filter === f ? '#1B5E3B' : dm.back, color: filter === f ? 'white' : dm.text2 }}>
               {f}
             </motion.button>
           ))}
@@ -337,7 +485,7 @@ function SuggestionsScreen({ onBack }: { onBack: () => void }) {
       </div>
       <div className="grid grid-cols-2 gap-3 px-4 pt-4">
         {isLoading
-          ? [1, 2].map(i => <div key={i} className="bg-white rounded-2xl h-48 animate-pulse" />)
+          ? [1, 2].map(i => <div key={i} className="rounded-2xl h-48 animate-pulse" style={{ background: dm.surface }} />)
           : filtered.length === 0
             ? (
               <div className="col-span-2 flex flex-col items-center py-16 gap-2">
@@ -348,38 +496,16 @@ function SuggestionsScreen({ onBack }: { onBack: () => void }) {
               </div>
             )
             : filtered.map((s, index) => (
-              <motion.div key={s.id}
-                initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }}
-                transition={{ delay: index * 0.08, type: 'spring', stiffness: 200, damping: 15 }}
-                whileTap={{ scale: 0.97 }} onClick={() => setSelected(s)}
-                className="bg-white rounded-2xl overflow-hidden shadow-sm cursor-pointer">
-                <div className="relative" style={{ height: 140 }}>
-                  <img src={s.image || PLACEHOLDER_IMAGE} alt={s.place} className="w-full h-full object-cover"
-                    onError={e => { (e.target as HTMLImageElement).src = PLACEHOLDER_IMAGE; }} />
-                  <div className="absolute inset-0" style={{ background: 'linear-gradient(to top, rgba(0,0,0,0.5) 0%, transparent 55%)' }} />
-                  <span className="absolute top-2 left-2 text-[9px] font-bold px-2 py-0.5 rounded-full"
-                    style={{ background: statusBg[s.status] || '#F3F4F6', color: statusColor[s.status] || '#6B7280' }}>
-                    {s.status}
-                  </span>
-                  <motion.button whileTap={{ scale: 0.85 }}
-                    onClick={e => { e.stopPropagation(); setLiked(prev => ({ ...prev, [s.id]: !prev[s.id] })); }}
-                    className="absolute top-2 right-2 w-7 h-7 rounded-full flex items-center justify-center"
-                    style={{ background: 'rgba(0,0,0,0.35)' }}>
-                    <Heart size={13} fill={liked[s.id] ? '#0EA5E9' : 'none'} color={liked[s.id] ? '#0EA5E9' : 'white'} />
-                  </motion.button>
-                </div>
-                <div className="p-2.5">
-                  <h3 className="text-sm font-black mb-0.5 leading-tight" style={{ color: '#1A1A1A' }}>{s.place}</h3>
-                  {s.provincia && (
-                    <div className="flex items-center gap-1 mb-1">
-                      <MapPin size={10} style={{ color: '#9CA3AF' }} />
-                      <span className="text-[10px]" style={{ color: '#9CA3AF' }}>{s.provincia}</span>
-                    </div>
-                  )}
-                  <span className="text-[9px] font-bold px-2 py-0.5 rounded-full"
-                    style={{ background: '#EEF7F0', color: '#1B5E3B' }}>{s.category}</span>
-                </div>
-              </motion.div>
+              <SuggestionCard
+                key={s.id}
+                item={s}
+                index={index}
+                liked={liked[s.id]}
+                onLike={() => setLiked(prev => ({ ...prev, [s.id]: !prev[s.id] }))}
+                onClick={() => setSelected(s)}
+                statusColor={statusColor}
+                statusBg={statusBg}
+              />
             ))
         }
       </div>
@@ -394,6 +520,14 @@ function DestinationsScreen({ onBack }: { onBack: () => void }) {
   const [destinations, setDestinations] = useState<Destination[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [selected, setSelected] = useState<Destination | null>(null);
+  const { isDark } = useTheme();
+  const dm = {
+    bg:      isDark ? '#0F1117' : '#F5F5F0',
+    surface: isDark ? '#1A1D27' : '#ffffff',
+    border:  isDark ? 'rgba(255,255,255,0.07)' : '#F3F4F6',
+    text:    isDark ? '#F0F4FF' : '#1A1A1A',
+    back:    isDark ? '#22263A' : '#F3F4F6',
+  };
 
   useEffect(() => {
     const load = async () => {
@@ -425,18 +559,20 @@ function DestinationsScreen({ onBack }: { onBack: () => void }) {
   }
 
   return (
-    <motion.div className="min-h-screen pb-24" style={{ background: '#F5F5F0', fontFamily: 'Nunito, sans-serif' }}
+    <motion.div className="min-h-screen pb-24" style={{ background: dm.bg, fontFamily: 'Nunito, sans-serif' }}
       initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 6 }}
       transition={{ duration: 0.2, ease: 'easeOut' }}>
-      <div className="bg-white px-4 pt-5 pb-4 sticky top-0 z-10 shadow-sm flex items-center gap-3">
-        <button onClick={onBack} className="w-9 h-9 rounded-full flex items-center justify-center" style={{ background: '#F3F4F6' }}>
-          <ChevronLeft size={20} strokeWidth={2.5} />
+      <div className="px-4 pt-5 pb-4 sticky top-0 z-10 shadow-sm flex items-center gap-3"
+        style={{ background: dm.surface, borderBottom: `1px solid ${dm.border}` }}>
+        <button onClick={onBack} className="w-9 h-9 rounded-full flex items-center justify-center"
+          style={{ background: dm.back }}>
+          <ChevronLeft size={20} strokeWidth={2.5} style={{ color: dm.text }} />
         </button>
-        <h1 className="text-lg font-black" style={{ color: '#1A1A1A' }}>Destinos explorados</h1>
+        <h1 className="text-lg font-black" style={{ color: dm.text }}>Destinos explorados</h1>
       </div>
       <div className="grid grid-cols-2 gap-3 px-4 pt-4">
         {isLoading
-          ? [1,2,3,4].map(i => <div key={i} className="bg-white rounded-2xl h-48 animate-pulse" />)
+          ? [1,2,3,4].map(i => <div key={i} className="rounded-2xl h-48 animate-pulse" style={{ background: dm.surface }} />)
           : destinations.length === 0
             ? <div className="col-span-2 flex flex-col items-center py-16 gap-2">
                 <Compass size={40} color="#D1D5DB" strokeWidth={1.5} />
@@ -455,15 +591,23 @@ function DestinationsScreen({ onBack }: { onBack: () => void }) {
 
 // -- Searches screen
 function SearchesScreen({ onBack }: { onBack: () => void }) {
+  const { isDark } = useTheme();
+  const dm = {
+    bg: isDark ? '#0F1117' : '#F5F5F0', surface: isDark ? '#1A1D27' : '#ffffff',
+    border: isDark ? 'rgba(255,255,255,0.07)' : '#F3F4F6',
+    text: isDark ? '#F0F4FF' : '#1A1A1A', back: isDark ? '#22263A' : '#F3F4F6',
+  };
   return (
-    <motion.div className="min-h-screen pb-24" style={{ background: '#F5F5F0', fontFamily: 'Nunito, sans-serif' }}
+    <motion.div className="min-h-screen pb-24" style={{ background: dm.bg, fontFamily: 'Nunito, sans-serif' }}
       initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 6 }}
       transition={{ duration: 0.2, ease: 'easeOut' }}>
-      <div className="bg-white px-4 pt-5 pb-4 sticky top-0 z-10 shadow-sm flex items-center gap-3">
-        <button onClick={onBack} className="w-9 h-9 rounded-full flex items-center justify-center" style={{ background: '#F3F4F6' }}>
-          <ChevronLeft size={20} strokeWidth={2.5} />
+      <div className="px-4 pt-5 pb-4 sticky top-0 z-10 shadow-sm flex items-center gap-3"
+        style={{ background: dm.surface, borderBottom: `1px solid ${dm.border}` }}>
+        <button onClick={onBack} className="w-9 h-9 rounded-full flex items-center justify-center"
+          style={{ background: dm.back }}>
+          <ChevronLeft size={20} strokeWidth={2.5} style={{ color: dm.text }} />
         </button>
-        <h1 className="text-lg font-black" style={{ color: '#1A1A1A' }}>Pesquisas recentes (IA)</h1>
+        <h1 className="text-lg font-black" style={{ color: dm.text }}>Pesquisas recentes (IA)</h1>
       </div>
       <div className="flex flex-col items-center py-16 gap-2">
         <Search size={40} color="#D1D5DB" strokeWidth={1.5} />
@@ -491,6 +635,17 @@ function SuggestedProfilesScreen({ onBack }: { onBack: () => void }) {
   const [loadingFollow, setLoadingFollow] = useState<Record<string, boolean>>({});
   const [search, setSearch] = useState('');
   const [error, setError] = useState<string | null>(null);
+  const { isDark } = useTheme();
+  const dm = {
+    bg:      isDark ? '#0F1117' : '#F5F5F0',
+    surface: isDark ? '#1A1D27' : '#ffffff',
+    border:  isDark ? 'rgba(255,255,255,0.07)' : '#F3F4F6',
+    text:    isDark ? '#F0F4FF' : '#1A1A1A',
+    text2:   isDark ? '#6B7A99' : '#6B7280',
+    back:    isDark ? '#22263A' : '#F3F4F6',
+    input:   isDark ? '#22263A' : '#F3F4F6',
+    skel:    isDark ? '#22263A' : '#E5E7EB',
+  };
 
   useEffect(() => {
     const load = async () => {
@@ -523,27 +678,32 @@ function SuggestedProfilesScreen({ onBack }: { onBack: () => void }) {
   const filtered = users.filter(u => !search || u.name.toLowerCase().includes(search.toLowerCase()));
 
   return (
-    <motion.div className="min-h-screen pb-24" style={{ background: '#F5F5F0', fontFamily: 'Nunito, sans-serif' }}
+    <motion.div className="min-h-screen pb-24" style={{ background: dm.bg, fontFamily: 'Nunito, sans-serif' }}
       initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 6 }}
       transition={{ duration: 0.2, ease: 'easeOut' }}>
-      <div className="bg-white px-4 pt-5 pb-3 sticky top-0 z-10 shadow-sm">
+      <div className="px-4 pt-5 pb-3 sticky top-0 z-10 shadow-sm"
+        style={{ background: dm.surface, borderBottom: `1px solid ${dm.border}` }}>
         <div className="flex items-center gap-3 mb-3">
-          <button onClick={onBack} className="w-9 h-9 rounded-full flex items-center justify-center" style={{ background: '#F3F4F6' }}>
-            <ChevronLeft size={20} strokeWidth={2.5} />
+          <button onClick={onBack} className="w-9 h-9 rounded-full flex items-center justify-center"
+            style={{ background: dm.back }}>
+            <ChevronLeft size={20} strokeWidth={2.5} style={{ color: dm.text }} />
           </button>
-          <h1 className="text-lg font-black" style={{ color: '#1A1A1A' }}>Perfis Sugeridos</h1>
+          <h1 className="text-lg font-black" style={{ color: dm.text }}>Perfis Sugeridos</h1>
         </div>
-        <div className="flex items-center gap-2 px-3 py-2.5 rounded-xl" style={{ background: '#F3F4F6' }}>
+        <div className="flex items-center gap-2 px-3 py-2.5 rounded-xl" style={{ background: dm.input }}>
           <Search size={15} color="#9CA3AF" />
           <input type="text" value={search} onChange={e => setSearch(e.target.value)}
-            placeholder="Pesquisar utilizadores..." className="flex-1 bg-transparent text-sm outline-none" />
+            placeholder="Pesquisar utilizadores..."
+            className="flex-1 bg-transparent text-sm outline-none"
+            style={{ color: dm.text }} />
           {search && <button onClick={() => setSearch('')}><X size={14} color="#9CA3AF" /></button>}
         </div>
       </div>
       <AnimatePresence>
         {error && (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-            className="mx-4 mt-3 flex items-center gap-2 px-4 py-3 rounded-xl" style={{ background: '#FEF2F2', color: '#DC2626' }}>
+            className="mx-4 mt-3 flex items-center gap-2 px-4 py-3 rounded-xl"
+            style={{ background: isDark ? 'rgba(248,113,113,0.12)' : '#FEF2F2', color: '#DC2626' }}>
             <AlertCircle size={16} /><p className="text-xs flex-1">{error}</p>
             <button onClick={() => setError(null)}><X size={14} /></button>
           </motion.div>
@@ -552,10 +712,14 @@ function SuggestedProfilesScreen({ onBack }: { onBack: () => void }) {
       <div className="px-4 pt-4 space-y-3">
         {loading
           ? [1,2,3].map(i => (
-              <div key={i} className="bg-white rounded-2xl p-4 flex items-center gap-3 animate-pulse">
-                <div className="w-14 h-14 rounded-full bg-gray-200" />
-                <div className="flex-1 space-y-2"><div className="h-4 bg-gray-200 rounded w-2/3" /><div className="h-3 bg-gray-200 rounded w-1/2" /></div>
-                <div className="w-20 h-9 bg-gray-200 rounded-xl" />
+              <div key={i} className="rounded-2xl p-4 flex items-center gap-3 animate-pulse"
+                style={{ background: dm.surface }}>
+                <div className="w-14 h-14 rounded-full" style={{ background: dm.skel }} />
+                <div className="flex-1 space-y-2">
+                  <div className="h-4 rounded w-2/3" style={{ background: dm.skel }} />
+                  <div className="h-3 rounded w-1/2" style={{ background: dm.skel }} />
+                </div>
+                <div className="w-20 h-9 rounded-xl" style={{ background: dm.skel }} />
               </div>
             ))
           : filtered.length === 0
@@ -571,8 +735,10 @@ function SuggestedProfilesScreen({ onBack }: { onBack: () => void }) {
                 return (
                   <motion.div key={u.id} initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }}
                     transition={{ delay: index * 0.04 }}
-                    className="bg-white rounded-2xl p-4 flex items-center gap-3 shadow-sm">
-                    <div className="w-14 h-14 rounded-full overflow-hidden flex-shrink-0" style={{ border: '2px solid #F3F4F6' }}>
+                    className="rounded-2xl p-4 flex items-center gap-3 shadow-sm"
+                    style={{ background: dm.surface }}>
+                    <div className="w-14 h-14 rounded-full overflow-hidden flex-shrink-0"
+                      style={{ border: `2px solid ${dm.border}` }}>
                       {u.avatar
                         ? <img src={u.avatar} alt={u.name} className="w-full h-full object-cover" />
                         : <div className="w-full h-full flex items-center justify-center text-xl font-black"
@@ -581,15 +747,16 @@ function SuggestedProfilesScreen({ onBack }: { onBack: () => void }) {
                           </div>}
                     </div>
                     <div className="flex-1 min-w-0">
-                      <p className="text-sm font-black truncate" style={{ color: '#1A1A1A' }}>{u.name}</p>
-                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-full" style={{ background: '#EEF7F0', color: '#1B5E3B' }}>
+                      <p className="text-sm font-black truncate" style={{ color: dm.text }}>{u.name}</p>
+                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-full"
+                        style={{ background: isDark ? 'rgba(74,222,128,0.12)' : '#EEF7F0', color: '#1B5E3B' }}>
                         {ROLE_LABEL[u.role] ?? u.role}
                       </span>
-                      {u.bio && <p className="text-xs mt-1 line-clamp-1" style={{ color: '#6B7280' }}>{u.bio}</p>}
+                      {u.bio && <p className="text-xs mt-1 line-clamp-1" style={{ color: dm.text2 }}>{u.bio}</p>}
                     </div>
                     <motion.button whileTap={{ scale: 0.95 }} onClick={() => handleToggleFollow(u.id)} disabled={isBtnLoading}
                       className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold flex-shrink-0"
-                      style={{ background: isFollowingUser ? '#F3F4F6' : '#1B5E3B', color: isFollowingUser ? '#6B7280' : 'white' }}>
+                      style={{ background: isFollowingUser ? dm.back : '#1B5E3B', color: isFollowingUser ? dm.text2 : 'white' }}>
                       {isBtnLoading
                         ? <div className="w-3 h-3 border-2 rounded-full animate-spin" style={{ borderTopColor: 'currentColor' }} />
                         : isFollowingUser ? <UserCheck size={13} strokeWidth={2.5} /> : <UserPlus size={13} strokeWidth={2.5} />}
@@ -609,6 +776,15 @@ export default function Profile({
   onSettings, onLogout: _onLogout, onAddPost: _onAddPost, onEditProfile, onSuggest }: ProfileProps) {
   useScrollTop();
   const { user } = useAuth();
+  const { isDark } = useTheme();
+  const dm = {
+    bg:      isDark ? '#0F1117' : '#F5F5F0',
+    surface: isDark ? '#1A1D27' : '#ffffff',
+    border:  isDark ? 'rgba(255,255,255,0.07)' : '#F3F4F6',
+    text:    isDark ? '#F0F4FF' : '#1A1A1A',
+    text2:   isDark ? '#6B7A99' : '#9CA3AF',
+    skel:    isDark ? '#22263A' : '#E5E7EB',
+  };
   const [communityDismissed, setCommunityDismissed] = useState(false);
   const [activeScreen, setActiveScreen] = useState<'reviews'|'suggestions'|'destinations'|'searches'|'people'|null>(null);
   // name: user.name vem de mapApiUser que j� tenta u.name || u.username || email prefix
@@ -664,7 +840,8 @@ export default function Profile({
   };
 
   const StatVal = ({ v }: { v: number }) => statsLoading
-    ? <span className="inline-block w-7 h-5 rounded-md animate-pulse align-middle" style={{ background: '#E5E7EB' }} />
+    ? <span className="inline-block w-7 h-5 rounded-md animate-pulse align-middle"
+        style={{ background: dm.skel }} />
     : <>{v}</>;
 
   const stats = [
@@ -688,7 +865,7 @@ export default function Profile({
   if (activeScreen === 'people')       return <SuggestedProfilesScreen onBack={() => setActiveScreen(null)} />;
 
   return (
-    <div className="min-h-screen pb-24" style={{ background: '#F5F5F0', fontFamily: 'Nunito, sans-serif' }}>
+    <div className="min-h-screen pb-24" style={{ background: dm.bg, fontFamily: 'Nunito, sans-serif' }}>
 
       {/* -- Hero banner ------------------------------------------------------ */}
       <div className="relative w-full" style={{ height: 180 }}>
@@ -730,9 +907,9 @@ export default function Profile({
             </div>
             {/* Nome ao lado do avatar */}
             <div className="pb-1">
-              <h1 className="text-lg font-black leading-tight" style={{ color: '#1A1A1A' }}>{name}</h1>
+              <h1 className="text-lg font-black leading-tight" style={{ color: dm.text }}>{name}</h1>
               {user?.bio && (
-                <p className="text-xs mt-0.5 leading-snug" style={{ color: '#6B7280' }}>{user.bio}</p>
+                <p className="text-xs mt-0.5 leading-snug" style={{ color: dm.text2 }}>{user.bio}</p>
               )}
             </div>
           </div>
@@ -744,11 +921,11 @@ export default function Profile({
             <motion.button key={s.label} whileTap={{ scale: 0.95 }}
               onClick={() => setActiveScreen(s.screen)}
               className="rounded-2xl py-2.5 px-2 flex flex-col items-center gap-0.5 shadow-sm"
-              style={{ background: s.bg }}>
-              <span className="text-2xl font-black leading-tight" style={{ color: '#1A1A1A' }}>
+              style={{ background: isDark ? '#1A1D27' : s.bg, border: isDark ? `1px solid rgba(255,255,255,0.06)` : 'none' }}>
+              <span className="text-2xl font-black leading-tight" style={{ color: dm.text }}>
                 <StatVal v={s.value} />
               </span>
-              <span className="text-[11px] font-semibold" style={{ color: '#6B7280' }}>{s.label}</span>
+              <span className="text-[11px] font-semibold" style={{ color: dm.text2 }}>{s.label}</span>
             </motion.button>
           ))}
         </div>
@@ -792,7 +969,8 @@ export default function Profile({
           {activities.map(a => (
             <motion.button key={a.title} whileTap={{ scale: 0.98 }}
               onClick={() => setActiveScreen(a.screen)}
-              className="w-full flex items-center gap-4 bg-white rounded-2xl p-4 shadow-sm text-left">
+              className="w-full flex items-center gap-4 rounded-2xl p-4 shadow-sm text-left"
+              style={{ background: dm.surface }}>
               {/* �cone */}
               <div className="w-11 h-11 rounded-xl flex items-center justify-center flex-shrink-0"
                 style={{ background: a.bg }}>
@@ -800,13 +978,13 @@ export default function Profile({
               </div>
               {/* Texto */}
               <div className="flex-1 min-w-0">
-                <p className="text-sm font-black truncate" style={{ color: '#1A1A1A' }}>{a.title}</p>
-                <p className="text-xs mt-0.5 truncate" style={{ color: '#9CA3AF' }}>{a.desc}</p>
+                <p className="text-sm font-black truncate" style={{ color: dm.text }}>{a.title}</p>
+                <p className="text-xs mt-0.5 truncate" style={{ color: dm.text2 }}>{a.desc}</p>
               </div>
               {/* Contador + seta */}
               <div className="flex items-center gap-1.5 flex-shrink-0">
-                <span className="text-sm font-black" style={{ color: '#1A1A1A' }}>{a.count}</span>
-                <ChevronRight size={15} style={{ color: '#D1D5DB' }} />
+                <span className="text-sm font-black" style={{ color: dm.text }}>{a.count}</span>
+                <ChevronRight size={15} style={{ color: isDark ? '#3A4460' : '#D1D5DB' }} />
               </div>
             </motion.button>
           ))}

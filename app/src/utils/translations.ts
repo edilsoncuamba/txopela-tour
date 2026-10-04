@@ -8,39 +8,64 @@
 
 // ─── Categorias de Locais ─────────────────────────────────────────────────────
 export const LOCAL_CATEGORY_PT: Record<string, string> = {
-  restaurant:  'Restaurante',
-  hotel:       'Hospedagem',
-  attraction:  'Atração',
-  shop:        'Loja',
-  service:     'Serviço',
+  restaurant:       'Restaurante',
+  hotel:            'Hospedagem',
+  attraction:       'Atração',
+  shop:             'Loja',
+  service:          'Serviço',
   // subcategorias comuns
-  beach:       'Praia',
-  park:        'Parque',
-  museum:      'Museu',
-  monument:    'Monumento',
-  market:      'Mercado',
-  bar:         'Bar',
-  cafe:        'Café',
-  spa:         'Spa',
-  sport:       'Desporto',
+  beach:            'Praia',
+  park:             'Parque',
+  museum:           'Museu',
+  monument:         'Monumento',
+  market:           'Mercado',
+  bar:              'Bar',
+  cafe:             'Café',
+  spa:              'Spa',
+  sport:            'Desporto',
+  nature:           'Natureza',
+  lodge:            'Lodge',
+  waterfall:        'Cascata',
+  reserve:          'Reserva',
+  heritage:         'Património',
+  cultural:         'Cultural',
+  historic:         'Histórico',
+  island:           'Ilha',
+  lake:             'Lago',
+  forest:           'Floresta',
 };
 
 // ─── Categorias de Serviços ───────────────────────────────────────────────────
 export const SERVICE_CATEGORY_PT: Record<string, string> = {
-  transport:     'Transporte',
-  guide:         'Guia Turístico',
-  accommodation: 'Hospedagem',
-  experience:    'Experiência',
-  equipment:     'Equipamento',
+  transport:        'Transporte',
+  guide:            'Guia Turístico',
+  accommodation:    'Hospedagem',
+  experience:       'Experiência',
+  equipment:        'Equipamento',
+  tour_guide:       'Guia Turístico',
+  'tour-guide':     'Guia Turístico',
+  travel_agency:    'Agência de Viagens',
+  'travel-agency':  'Agência de Viagens',
+  food:             'Gastronomia',
+  entertainment:    'Entretenimento',
+  health:           'Saúde',
+  other:            'Outro',
 };
 
 // ─── Categorias de Posts ──────────────────────────────────────────────────────
 export const POST_CATEGORY_PT: Record<string, string> = {
-  discovery: 'Descoberta',
-  review:    'Avaliação',
-  tip:       'Dica',
-  story:     'História',
-  other:     'Publicação',
+  discovery:        'Descoberta',
+  review:           'Avaliação',
+  tip:              'Dica',
+  story:            'História',
+  other:            'Publicação',
+  // Aliases que a API pode devolver em posts
+  post:             'Publicação',
+  news:             'Notícia',
+  event:            'Evento',
+  article:          'Artigo',
+  photo:            'Fotografia',
+  video:            'Vídeo',
 };
 
 // ─── Status de publicações ────────────────────────────────────────────────────
@@ -188,22 +213,43 @@ export function itemMatchesFilter(
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-/** Traduz categoria de local. Devolve o próprio valor se não tiver tradução. */
+/**
+ * Dicionário unificado — cobre TODOS os valores que a API pode devolver em
+ * qualquer campo de categoria, independentemente do tipo de recurso.
+ * Usado como fallback final em todas as funções de tradução.
+ */
+const ALL_CATEGORIES_PT: Record<string, string> = {
+  ...LOCAL_CATEGORY_PT,
+  ...SERVICE_CATEGORY_PT,
+  ...POST_CATEGORY_PT,
+};
+
+/**
+ * Traduz qualquer string de categoria para português.
+ * Tenta nos três dicionários; se não encontrar, devolve o valor original
+ * com a primeira letra em maiúscula.
+ */
+function translateAny(category: string): string {
+  const key = category.toLowerCase().trim();
+  return ALL_CATEGORIES_PT[key] ?? (category.charAt(0).toUpperCase() + category.slice(1));
+}
+
+/** Traduz categoria de local. */
 export function translateLocalCategory(category: string | undefined | null): string {
   if (!category) return 'Atração';
-  return LOCAL_CATEGORY_PT[category.toLowerCase()] ?? category;
+  return translateAny(category);
 }
 
-/** Traduz categoria de serviço. Devolve o próprio valor se não tiver tradução. */
+/** Traduz categoria de serviço. */
 export function translateServiceCategory(category: string | undefined | null): string {
   if (!category) return 'Serviço';
-  return SERVICE_CATEGORY_PT[category.toLowerCase()] ?? category;
+  return translateAny(category);
 }
 
-/** Traduz categoria de post. Devolve o próprio valor se não tiver tradução. */
+/** Traduz categoria de post/publicação. */
 export function translatePostCategory(category: string | undefined | null): string {
   if (!category) return 'Publicação';
-  return POST_CATEGORY_PT[category.toLowerCase()] ?? category;
+  return translateAny(category);
 }
 
 /** Traduz status de publicação/reserva. */

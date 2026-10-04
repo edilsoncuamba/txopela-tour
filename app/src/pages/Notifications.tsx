@@ -4,6 +4,7 @@ import { Bell, Heart, MessageCircle, UserPlus, Calendar, Trash2 } from 'lucide-r
 import Header from '@/components/Header';
 import { notificationsApi } from '@/services/api';
 import { useScrollTop } from '@/hooks/useScrollTop';
+import { useTheme } from '@/context/ThemeContext';
 
 interface NotificationItem {
   id: string;
@@ -39,6 +40,7 @@ function mapApiNotification(item: any): NotificationItem {
 export default function Notifications({
   onNotifications, onChat }: NotificationsProps) {
   useScrollTop();
+  const { isDark } = useTheme();
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [filter, setFilter] = useState<'all' | 'unread'>('all');
@@ -140,21 +142,30 @@ export default function Notifications({
   };
 
   return (
-    <div className="min-h-screen bg-gray-50/50 pb-24 scrollbar-hide">
+    <div className="min-h-screen pb-24 scrollbar-hide"
+      style={{ background: isDark ? '#0F1117' : '#F9FAFB' }}>
       <Header onNotifications={onNotifications} onChat={onChat} />
 
       {/* Cabeçalho */}
       <motion.div
-        className="px-4 py-4 flex items-center justify-between border-b border-gray-100 bg-white"
+        className="px-4 py-4 flex items-center justify-between border-b"
+        style={{
+          background: isDark ? '#1A1D27' : '#ffffff',
+          borderColor: isDark ? 'rgba(255,255,255,0.07)' : '#F3F4F6',
+        }}
         initial={{ opacity: 0, y: -20 }}
         animate={{ opacity: 1, y: 0 }}
       >
         <div className="flex items-center gap-3">
           <Bell size={24} className="text-[#1B5E3B]" />
           <div>
-            <h1 className="text-xl font-bold text-gray-900">Notificações</h1>
+            <h1 className="text-xl font-bold" style={{ color: isDark ? '#F0F4FF' : '#111827' }}>
+              Notificações
+            </h1>
             {unreadCount > 0 && (
-              <p className="text-xs text-gray-500">{unreadCount} não lida{unreadCount > 1 ? 's' : ''}</p>
+              <p className="text-xs" style={{ color: isDark ? '#6B7A99' : '#6B7280' }}>
+                {unreadCount} não lida{unreadCount > 1 ? 's' : ''}
+              </p>
             )}
           </div>
         </div>
@@ -162,8 +173,11 @@ export default function Notifications({
           <motion.button
             whileTap={{ scale: 0.9 }}
             onClick={handleMarkAllAsRead}
-            className="text-xs text-[#1B5E3B] font-semibold hover:underline px-3 py-1 rounded-full"
-            style={{ background: '#EEF7F0' }}
+            className="text-xs font-semibold px-3 py-1 rounded-full"
+            style={{
+              background: isDark ? 'rgba(74,222,128,0.12)' : '#EEF7F0',
+              color: '#1B5E3B',
+            }}
           >
             Marcar tudo
           </motion.button>
@@ -172,7 +186,11 @@ export default function Notifications({
 
       {/* Filtros */}
       <motion.div
-        className="px-4 py-3 flex gap-2 border-b border-gray-100 bg-white"
+        className="px-4 py-3 flex gap-2 border-b"
+        style={{
+          background: isDark ? '#1A1D27' : '#ffffff',
+          borderColor: isDark ? 'rgba(255,255,255,0.07)' : '#F3F4F6',
+        }}
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
       >
@@ -180,11 +198,15 @@ export default function Notifications({
           <button
             key={f}
             onClick={() => setFilter(f)}
-            className={`px-4 py-2 rounded-full text-sm font-semibold transition-all ${
-              filter === f
-                ? 'bg-[#1B5E3B] text-white'
-                : 'bg-white text-gray-600 hover:bg-gray-100 border border-gray-200'
-            }`}
+            className="px-4 py-2 rounded-full text-sm font-semibold transition-all"
+            style={filter === f
+              ? { background: '#1B5E3B', color: '#ffffff' }
+              : {
+                  background: isDark ? '#22263A' : '#ffffff',
+                  color: isDark ? '#A8B4CC' : '#4B5563',
+                  border: `1px solid ${isDark ? 'rgba(255,255,255,0.08)' : '#E5E7EB'}`,
+                }
+            }
           >
             {f === 'all' ? 'Todas' : 'Não lidas'}
             {f === 'unread' && unreadCount > 0 && (
@@ -201,11 +223,15 @@ export default function Notifications({
         {isLoading ? (
           <div className="space-y-2">
             {[1, 2, 3, 4].map(i => (
-              <div key={i} className="bg-white rounded-xl p-4 animate-pulse flex gap-3">
-                <div className="w-12 h-12 rounded-full bg-gray-200 flex-shrink-0" />
+              <div key={i} className="rounded-xl p-4 animate-pulse flex gap-3"
+                style={{ background: isDark ? '#1A1D27' : '#ffffff' }}>
+                <div className="w-12 h-12 rounded-full flex-shrink-0"
+                  style={{ background: isDark ? '#22263A' : '#E5E7EB' }} />
                 <div className="flex-1 space-y-2">
-                  <div className="h-3 bg-gray-200 rounded w-3/4" />
-                  <div className="h-3 bg-gray-200 rounded w-1/2" />
+                  <div className="h-3 rounded w-3/4"
+                    style={{ background: isDark ? '#22263A' : '#E5E7EB' }} />
+                  <div className="h-3 rounded w-1/2"
+                    style={{ background: isDark ? '#22263A' : '#E5E7EB' }} />
                 </div>
               </div>
             ))}
@@ -219,11 +245,17 @@ export default function Notifications({
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: index * 0.04 }}
                 onClick={() => !notif.read && handleMarkAsRead(notif.id)}
-                className={`p-4 rounded-xl transition-all cursor-pointer border ${
-                  notif.read
-                    ? 'bg-white hover:bg-gray-50 border-gray-100'
-                    : 'bg-blue-50 hover:bg-blue-100 border-blue-100'
-                }`}
+                className="p-4 rounded-xl transition-all cursor-pointer border"
+                style={notif.read
+                  ? {
+                      background: isDark ? '#1A1D27' : '#ffffff',
+                      borderColor: isDark ? 'rgba(255,255,255,0.07)' : '#F3F4F6',
+                    }
+                  : {
+                      background: isDark ? 'rgba(56,189,248,0.08)' : '#EFF6FF',
+                      borderColor: isDark ? 'rgba(56,189,248,0.2)' : '#BFDBFE',
+                    }
+                }
               >
                 <div className="flex items-start gap-3">
                   {/* Avatar */}
@@ -241,16 +273,19 @@ export default function Notifications({
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 mb-1">
                       {getIcon(notif.type)}
-                      <p className="text-sm text-gray-900 leading-snug">
+                      <p className="text-sm leading-snug" style={{ color: isDark ? '#DDE4F5' : '#111827' }}>
                         <span className="font-semibold">{notif.user.name}</span>
                         {' '}
-                        <span className="text-gray-600">{getTypeLabel(notif.type)}</span>
+                        <span style={{ color: isDark ? '#A8B4CC' : '#4B5563' }}>{getTypeLabel(notif.type)}</span>
                       </p>
                     </div>
                     {notif.message && notif.message !== getTypeLabel(notif.type) && (
-                      <p className="text-xs text-gray-600 mt-0.5 line-clamp-2">{notif.message}</p>
+                      <p className="text-xs mt-0.5 line-clamp-2"
+                        style={{ color: isDark ? '#6B7A99' : '#6B7280' }}>{notif.message}</p>
                     )}
-                    <p className="text-xs text-gray-400 mt-1">{formatDate(notif.createdAt)}</p>
+                    <p className="text-xs mt-1" style={{ color: isDark ? '#4A5568' : '#9CA3AF' }}>
+                      {formatDate(notif.createdAt)}
+                    </p>
                   </div>
 
                   {/* Acções */}
@@ -261,7 +296,8 @@ export default function Notifications({
                     <motion.button
                       whileTap={{ scale: 0.9 }}
                       onClick={e => { e.stopPropagation(); handleRemove(notif.id); }}
-                      className="p-1.5 hover:bg-red-50 rounded-lg transition-colors"
+                      className="p-1.5 rounded-lg transition-colors"
+                      style={{ background: isDark ? 'rgba(248,113,113,0.08)' : 'transparent' }}
                     >
                       <Trash2 size={14} className="text-red-400" />
                     </motion.button>
@@ -276,13 +312,15 @@ export default function Notifications({
             initial={{ opacity: 0, scale: 0.9 }}
             animate={{ opacity: 1, scale: 1 }}
           >
-            <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mb-4">
-              <Bell size={32} className="text-gray-400" />
+            <div className="w-16 h-16 rounded-full flex items-center justify-center mb-4"
+              style={{ background: isDark ? '#1A1D27' : '#F3F4F6' }}>
+              <Bell size={32} style={{ color: isDark ? '#3A4460' : '#D1D5DB' }} />
             </div>
-            <h3 className="text-lg font-semibold text-gray-900 mb-1">
+            <h3 className="text-lg font-semibold mb-1"
+              style={{ color: isDark ? '#F0F4FF' : '#111827' }}>
               {filter === 'unread' ? 'Sem notificações não lidas' : 'Nenhuma notificação'}
             </h3>
-            <p className="text-sm text-gray-500">
+            <p className="text-sm" style={{ color: isDark ? '#6B7A99' : '#6B7280' }}>
               {filter === 'unread' ? 'Estás em dia com tudo!' : 'As tuas notificações aparecem aqui.'}
             </p>
             {filter === 'unread' && (

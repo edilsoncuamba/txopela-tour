@@ -5,8 +5,8 @@ import { cultureApi } from '../api';
 import type { ProvinceInfo } from '../types';
 import { PLACEHOLDER_IMAGE } from '@/utils/dataValidation';
 import MozambiqueDetail from './MozambiqueDetail';
-
 import { useScrollTop } from '@/hooks/useScrollTop';
+import { useTheme } from '@/context/ThemeContext';
 
 interface CultureHomeProps {
   onBack: () => void;
@@ -45,6 +45,22 @@ const PROVINCE_INFO: Record<string, string> = {
   '__mozambique__':   'História, natureza e diversidade cultural reunidas num só país.',
 };
 
+// Descrições curtas por província — mostradas no hover no card lateral
+const PROVINCE_SHORT: Record<string, string> = {
+  'maputo-cidade':    'Património urbano',
+  'maputo-provincia': 'Cultura do sul',
+  'gaza':             'História e tradição',
+  'inhambane':        'Cultura e natureza',
+  'sofala':           'Herança marítima',
+  'manica':           'Tradições serranas',
+  'tete':             'Cultura do Zambeze',
+  'zambezia':         'Arte e cultura',
+  'nampula':          'Diversidade cultural',
+  'cabo-delgado':     'Património ancestral',
+  'niassa':           'Cultura e natureza',
+  '__mozambique__':   'Todo o país',
+};
+
 function GeometricPattern() {
   return (
     <svg width="120" height="120" viewBox="0 0 120 120" fill="none">
@@ -60,6 +76,17 @@ function GeometricPattern() {
 
 export default function CultureHome({ onBack, onProvinceSelect }: CultureHomeProps) {
   useScrollTop();
+  const { isDark } = useTheme();
+  const dm = {
+    bg:      isDark ? '#0F1117' : '#F5F5F0',
+    surface: isDark ? '#1A1D27' : '#ffffff',
+    border:  isDark ? 'rgba(255,255,255,0.07)' : '#F3F4F6',
+    text:    isDark ? '#F0F4FF' : '#1A1A1A',
+    text2:   isDark ? '#6B7A99' : '#9CA3AF',
+    input:   isDark ? '#22263A' : '#ffffff',
+    skel:    isDark ? '#22263A' : '#E5E7EB',
+    greenBg: isDark ? 'rgba(74,222,128,0.12)' : '#EEF7F0',
+  };
   const [provinces, setProvinces] = useState<ProvinceInfo[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [search, setSearch] = useState('');
@@ -101,7 +128,7 @@ export default function CultureHome({ onBack, onProvinceSelect }: CultureHomePro
   return (
     <motion.div
       className="min-h-screen pb-20 md:pb-4"
-      style={{ background: '#F5F5F0', fontFamily: 'Nunito, sans-serif' }}
+      style={{ background: dm.bg, fontFamily: 'Nunito, sans-serif' }}
       initial={{ opacity: 0, y: 10 }}
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: 6 }}
@@ -110,17 +137,13 @@ export default function CultureHome({ onBack, onProvinceSelect }: CultureHomePro
       {/* ── HEADER ─────────────────────────────────────────────────────── */}
       <div className="bg-white px-5 pt-4 pb-3 relative overflow-hidden">
         <div className="absolute top-0 right-0 pointer-events-none"><GeometricPattern /></div>
-        <div className="relative z-10 text-left">
-          <h1 className="text-xl font-black leading-tight" style={{ color: '#1B5E3B' }}>
-            Património Cultural
-          </h1>
-        </div>
-        <div className="relative z-10 flex items-center gap-2 px-3 py-2.5 rounded-2xl"
-          style={{ background: '#F8FAFC', border: '1.5px solid #E2E8F0' }}>
-          <Search size={15} color="#9CA3AF" />
+
+        <div className="relative z-10 flex items-center bg-white rounded-2xl shadow-lg px-4 py-3 gap-2">
+          <Search size={17} className="text-gray-400 flex-shrink-0" />
           <input type="text" placeholder="Pesquisar províncias ou patrimónios..."
             value={search} onChange={e => setSearch(e.target.value)}
-            className="flex-1 text-sm bg-transparent focus:outline-none" style={{ color: '#1A1A1A' }} />
+            className="flex-1 text-sm bg-transparent focus:outline-none"
+            style={{ color: '#1A1A1A', fontFamily: 'Nunito, sans-serif' }} />
         </div>
       </div>
 
@@ -136,7 +159,7 @@ export default function CultureHome({ onBack, onProvinceSelect }: CultureHomePro
                   whileTap={{ scale: 0.98 }}
                   onClick={() => isMozambique ? setShowMozambique(true) : onProvinceSelect(featured)}
                   className="relative overflow-hidden rounded-2xl cursor-pointer flex-1"
-                  style={{ minHeight: 210 }}
+                  style={{ minHeight: 255 }}
                   initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }}
                   transition={{ delay: 0.06 }}
                 >
@@ -187,52 +210,40 @@ export default function CultureHome({ onBack, onProvinceSelect }: CultureHomePro
                 <motion.div
                   initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }}
                   transition={{ delay: 0.12 }}
-                  className="flex flex-col justify-between rounded-2xl p-4 w-44 flex-shrink-0"
+                  className="flex flex-col justify-center rounded-2xl p-4 w-44 flex-shrink-0"
                   style={{ background: '#EEF7F0' }}
                 >
-                  <div>
-                    <div className="w-10 h-10 rounded-full flex items-center justify-center mb-2"
-                      style={{ background: 'white' }}>
-                      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#1B5E3B" strokeWidth="1.8">
-                        <path d="M3 22V8l9-6 9 6v14"/><path d="M9 22V12h6v10"/>
-                      </svg>
-                    </div>
-                    <AnimatePresence mode="wait">
-                      <motion.div key={featured.id}
-                        initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }}
-                        exit={{ opacity: 0, y: -6 }} transition={{ duration: 0.2, ease: 'easeOut' }}>
-                        <p className="text-3xl font-black leading-none" style={{ color: '#1A1A1A' }}>
-                          {featured.districts.length}
-                        </p>
-                        <p className="text-sm font-bold mt-0.5 text-center uppercase tracking-wide" style={{ color: '#1A1A1A' }}>
-                          DISTRITOS PARA EXPLORAR
-                        </p>
-                        <p className="text-xs leading-snug mt-1.5 text-left" style={{ color: '#6B7280' }}>
-                          {infoText}
-                        </p>
-                      </motion.div>
-                    </AnimatePresence>
-                  </div>
-                  <motion.button whileTap={{ scale: 0.95 }}
-                    onClick={() => isMozambique ? setShowMozambique(true) : onProvinceSelect(featured)}
-                    className="flex items-center justify-center gap-1.5 w-full py-2 px-3 rounded-xl text-xs font-black text-white mt-3"
-                    style={{ background: '#1B5E3B' }}>
-                    {isMozambique ? 'Ver país' : 'Ver distritos'}
-                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                      <path d="M7 17L17 7M17 7H7M17 7V17" />
+                  <div className="w-10 h-10 rounded-full flex items-center justify-center mb-3"
+                    style={{ background: 'white' }}>
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#1B5E3B" strokeWidth="1.8">
+                      <path d="M3 22V8l9-6 9 6v14"/><path d="M9 22V12h6v10"/>
                     </svg>
-                  </motion.button>
+                  </div>
+                  <AnimatePresence mode="wait">
+                    <motion.div key={featured.id}
+                      initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: -6 }} transition={{ duration: 0.2, ease: 'easeOut' }}>
+                      <p className="text-3xl font-black leading-none" style={{ color: '#1A1A1A' }}>
+                        {featured.districts.length}
+                      </p>
+                      <p className="text-xs font-black mt-1 uppercase tracking-widest" style={{ color: '#1B5E3B' }}>
+                        Distritos
+                      </p>
+                      {PROVINCE_SHORT[featured.id] && (
+                        <p className="text-xs font-semibold mt-2 leading-snug" style={{ color: '#4B7A5E' }}>
+                          {PROVINCE_SHORT[featured.id]}
+                        </p>
+                      )}
+                    </motion.div>
+                  </AnimatePresence>
                 </motion.div>
               </div>
             )}
 
             {/* ── GRID PROVÍNCIAS ───────────────────────────────────────── */}
             <div>
-              <p className="text-base font-black text-left" style={{ color: '#1A1A1A' }}>
+              <p className="text-base font-black text-left mb-3" style={{ color: '#1A1A1A' }}>
                 Todas as províncias de Moçambique
-              </p>
-              <p className="text-xs text-left mb-2.5" style={{ color: '#9CA3AF' }}>
-                Explora o património cultural de cada região do país
               </p>
               <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-2">
                 {filtered.map((province, i) => (

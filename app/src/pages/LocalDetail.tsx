@@ -10,6 +10,7 @@ import { useAuth } from '@/context/AuthContext';
 import type { Local } from '@/types';
 import { translateUserType } from '@/utils/translations';
 import { useScrollTop } from '@/hooks/useScrollTop';
+import { useTheme } from '@/context/ThemeContext';
 
 interface LocalDetailProps {
   local: Local;
@@ -21,6 +22,15 @@ export default function LocalDetail({
   local, onBack, onAuthorPress }: LocalDetailProps) {
   useScrollTop();
   const { user } = useAuth();
+  const { isDark } = useTheme();
+  const dm = {
+    bg:      isDark ? '#0F1117' : '#ffffff',
+    surface: isDark ? '#1A1D27' : '#F9FAFB',
+    text:    isDark ? '#F0F4FF' : '#111827',
+    text2:   isDark ? '#A8B4CC' : '#4B5563',
+    text3:   isDark ? '#6B7A99' : '#9CA3AF',
+    border:  isDark ? 'rgba(255,255,255,0.07)' : '#E5E7EB',
+  };
 
   const [isLiked, setIsLiked]       = useState(local.liked || false);
   const [isSaved, setIsSaved]       = useState(local.saved || false);
@@ -152,7 +162,7 @@ export default function LocalDetail({
   const images: string[] = local.images?.length ? local.images : [PLACEHOLDER_IMAGE];
 
   return (
-    <div className="min-h-screen bg-white pb-24">
+    <div className="min-h-screen pb-24" style={{ background: dm.bg }}>
 
       {/* ── GALERIA ─────────────────────────────────────────────────────────── */}
       <motion.div
@@ -217,11 +227,11 @@ export default function LocalDetail({
       >
         {/* Título e rating */}
         <div className="mb-4">
-          <h1 className="text-2xl font-bold text-gray-900 mb-2">{local.name}</h1>
+          <h1 className="text-2xl font-bold mb-2" style={{ color: dm.text }}>{local.name}</h1>
           <div className="flex items-center gap-1">
             <Star size={18} className="text-yellow-400 fill-yellow-400" />
-            <span className="font-semibold text-gray-900">{local.rating?.toFixed(1) ?? '0.0'}</span>
-            <span className="text-sm text-gray-500">({local.reviewsCount ?? reviews.length} avaliações)</span>
+            <span className="font-semibold" style={{ color: dm.text }}>{local.rating?.toFixed(1) ?? '0.0'}</span>
+            <span className="text-sm" style={{ color: dm.text3 }}>({local.reviewsCount ?? reviews.length} avaliações)</span>
           </div>
         </div>
 

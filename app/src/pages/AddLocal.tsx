@@ -7,8 +7,9 @@ import {
   IconHeart, IconFlag, IconNavigation,
   CategoryIcon, STROKE,
 } from '@/components/icons';
-import { Zap, UtensilsCrossed, Mountain, Users, Eye, Accessibility, Camera as CameraIcon, Heart, Theater, MoreHorizontal, X, Check, ChevronLeft, ChevronDown, ArrowRight, MapPin, Camera, Trash2, Image as ImageIcon, Star, Loader2, Search, Globe, PartyPopper, HeartHandshake, AlertCircle, Sun, Maximize2, DoorOpen, EyeOff } from 'lucide-react';
+import { Zap, UtensilsCrossed, Mountain, Users, Eye, Accessibility, Camera as CameraIcon, Heart, Theater, MoreHorizontal, X, Check, ChevronLeft, ChevronDown, ArrowRight, MapPin, Camera, Trash2, Image as ImageIcon, Star, Loader2, Search, Globe, PartyPopper, HeartHandshake, AlertCircle, Sun, Maximize2, DoorOpen, EyeOff, Waves, Landmark, TreePine, Utensils, Hotel, Library, ShoppingBasket, Footprints, Anchor, CloudRain, Wind, Thermometer } from 'lucide-react';
 import { localsApi } from '@/services/api';
+import { uploadAndCache, cacheImages } from '@/utils/imageCache';
 import SubmissionSuccessScreen from '@/components/shared/SubmissionSuccessScreen';
 import { useScrollTop } from '@/hooks/useScrollTop';
 import LocationPicker, { type GeoFields, type LocationSource } from '@/components/LocationPicker';
@@ -26,14 +27,41 @@ const steps = [
   { n: 4, label: 'Revisão' },
 ];
 
-const tipoOptions = ['Praia', 'Monumento', 'Parque Natural', 'Restaurante', 'Hotel', 'Museu', 'Mercado', 'Trilha', 'Ilha', 'Outro'];
+const tipoOptions = [
+  { id: 'Praia',         label: 'Praia',         icon: <Waves size={18} strokeWidth={1.8} />,        color: '#2BB5C8' },
+  { id: 'Monumento',     label: 'Monumento',     icon: <Landmark size={18} strokeWidth={1.8} />,     color: '#7B5EA7' },
+  { id: 'Parque Natural',label: 'Parque Natural',icon: <TreePine size={18} strokeWidth={1.8} />,     color: '#1B5E3B' },
+  { id: 'Restaurante',   label: 'Restaurante',   icon: <Utensils size={18} strokeWidth={1.8} />,     color: '#E05A3A' },
+  { id: 'Hotel',         label: 'Hotel',         icon: <Hotel size={18} strokeWidth={1.8} />,        color: '#F4821F' },
+  { id: 'Museu',         label: 'Museu',         icon: <Library size={18} strokeWidth={1.8} />,      color: '#9B59B6' },
+  { id: 'Mercado',       label: 'Mercado',       icon: <ShoppingBasket size={18} strokeWidth={1.8} />, color: '#E67E22' },
+  { id: 'Trilha',        label: 'Trilha',        icon: <Footprints size={18} strokeWidth={1.8} />,   color: '#27AE60' },
+  { id: 'Ilha',          label: 'Ilha',          icon: <Anchor size={18} strokeWidth={1.8} />,        color: '#3498DB' },
+  { id: 'Outro',         label: 'Outro',         icon: <MoreHorizontal size={18} strokeWidth={1.8} />, color: '#6B7280' },
+];
+
 const epocaOptions = [
-  'Época seca — Maio a Outubro (safáris e praias)',
-  'Época quente e húmida — Novembro a Abril',
-  'Verão austral — Dezembro a Fevereiro (praias e mergulho)',
-  'Inverno austral — Junho a Agosto (fauna e flora)',
-  'Setembro a Novembro (baleias e mantas em Inhambane)',
-  'Todo o ano',
+  {
+    id: 'chuvosa',
+    label: 'Época quente e chuvosa',
+    subtitle: 'Novembro – Março',
+    icon: <CloudRain size={18} strokeWidth={1.8} />,
+    color: '#2563EB',
+  },
+  {
+    id: 'transicao',
+    label: 'Período de transição',
+    subtitle: 'Abril – Maio',
+    icon: <Wind size={18} strokeWidth={1.8} />,
+    color: '#7B5EA7',
+  },
+  {
+    id: 'seca',
+    label: 'Época seca e fresca',
+    subtitle: 'Junho – Outubro',
+    icon: <Sun size={18} strokeWidth={1.8} />,
+    color: '#F4821F',
+  },
 ];
 const destaquesOptions = [
   { id: 'panoramica',  label: 'Vista panorâmica',   icon: <Mountain size={18} strokeWidth={1.8} /> },
@@ -65,29 +93,34 @@ const distritosPorProvincia: Record<string, string[]> = {
 
 // ── Shared components ─────────────────────────────────────────────────────────
 
+// Uma cor por etapa — bola + linha que sai dela usam sempre a mesma cor
+const STEP_COLORS = ['#1B5E3B', '#0077B6', '#2BB5C8', '#7B5EA7'];
+
 function StepBar({ current }: { current: number }) {
   return (
-    <div className="flex items-center justify-between px-1 mt-4">
+    <div className="w-full mt-4" style={{ display: 'grid', gridTemplateColumns: '28px 1fr 28px 1fr 28px 1fr 28px', alignItems: 'center' }}>
       {steps.map((s, i) => {
         const active = s.n === current;
         const done   = s.n < current;
+        const color  = STEP_COLORS[i];
         return (
-          <div key={s.n} className="flex items-center flex-1">
-            <div className="flex flex-col items-center">
-              <div className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-black border-2"
-                style={{ background: done ? '#1B5E3B' : active ? '#1B5E3B' : 'white', borderColor: done || active ? '#1B5E3B' : '#E5E7EB', color: done || active ? 'white' : '#9CA3AF' }}>
+          <>
+            {/* Círculo + label */}
+            <div key={`step-${s.n}`} className="flex flex-col items-center">
+              <div className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-black"
+                style={{ background: (active || done) ? color : 'white', border: `2px solid ${(active || done) ? color : '#E5E7EB'}`, color: (active || done) ? 'white' : '#9CA3AF' }}>
                 {done ? <Check size={12} /> : s.n}
               </div>
-              <span className="text-[10px] font-bold mt-1 text-center"
-                style={{ color: active ? '#1B5E3B' : done ? '#1B5E3B' : '#9CA3AF' }}>
+              <span className="text-[10px] font-bold mt-1 text-center whitespace-nowrap"
+                style={{ color: (active || done) ? color : '#9CA3AF' }}>
                 {s.label}
               </span>
             </div>
+            {/* Linha — usa a cor da bola que a precede (índice i) */}
             {i < steps.length - 1 && (
-              <div className="flex-1 h-px mx-1 mb-4"
-                style={{ background: done ? '#1B5E3B' : '#E5E7EB' }} />
+              <div key={`line-${i}`} className="h-px" style={{ background: (active || done) ? color : '#E5E7EB', marginBottom: 16 }} />
             )}
-          </div>
+          </>
         );
       })}
     </div>
@@ -99,10 +132,7 @@ function PageHeader({ step, onBack }: { step: number; onBack: () => void }) {
     <div className="bg-white px-4 pt-5 pb-4 md:px-8">
       <div className="max-w-2xl mx-auto">
         <div className="flex items-center gap-3 mb-1">
-          <button onClick={onBack} className="w-9 h-9 bg-gray-100 rounded-full flex items-center justify-center flex-shrink-0">
-            <ChevronLeft size={20} style={{ color: '#1A1A1A' }} />
-          </button>
-          <h1 className="text-2xl font-black" style={{ color: '#1A1A1A' }}>Sugerir local</h1>
+          <h1 className="text-2xl font-black text-left" style={{ color: '#1A1A1A' }}>Sugerir local</h1>
         </div>
         <StepBar current={step} />
       </div>
@@ -167,77 +197,237 @@ const CATEGORY_COLORS: Record<string, string> = {
   'Outro': '#6B7280',
 };
 
-// ── CategoryPickerSheet — grid layout with icons ──────────────────────────────
+// ── CategoryPickerSheet — modal centrado ─────────────────────────────────────
 function CategoryPickerSheet({ value, onSelect, onClose }: {
   value: string; onSelect: (v: string) => void; onClose: () => void;
 }) {
   const cats = ['Praias', 'Cultura & História', 'Natureza', 'Aventura', 'Gastronomia', 'Mergulho', 'Ecoturismo', 'Outro'];
   return (
-    <motion.div className="fixed inset-0 z-50 flex flex-col justify-end"
+    <motion.div
+      className="fixed z-50 flex items-center justify-center"
+      style={{ top: 0, bottom: 0, left: 'var(--sidebar-w, 0px)', right: 0 }}
       initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
-      <div className="absolute inset-0 bg-black/40" onClick={onClose} />
-      <motion.div className="relative bg-white rounded-t-3xl pb-8"
-        initial={{ y: '100%' }} animate={{ y: 0 }} exit={{ y: '100%' }}
-        transition={{ duration: 0.2, ease: 'easeOut' }}>
-        <div className="flex justify-center pt-3 pb-1"><div className="w-10 h-1 rounded-full bg-gray-200" /></div>
-        <div className="flex items-center justify-between px-5 py-3 border-b border-gray-100">
-          <h3 className="text-base font-black" style={{ color: '#1A1A1A' }}>Categoria</h3>
-          <button onClick={onClose} className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center">
-            <X size={16} className="text-gray-500" />
+      <div className="absolute inset-0" style={{ background: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(4px)' }} onClick={onClose} />
+      <motion.div
+        className="relative flex flex-col"
+        style={{
+          width: 380, maxWidth: 'calc(100vw - 32px)', maxHeight: 'calc(80vh - 50px)',
+          background: 'white', borderRadius: 24,
+          boxShadow: '0 24px 64px rgba(0,0,0,0.18), 0 8px 24px rgba(0,0,0,0.1)',
+        }}
+        initial={{ opacity: 0, scale: 0.88, y: 16 }}
+        animate={{ opacity: 1, scale: 1, y: 0 }}
+        exit={{ opacity: 0, scale: 0.88, y: 16 }}
+        transition={{ duration: 0.2, ease: [0.34, 1.56, 0.64, 1] }}>
+
+        {/* Header */}
+        <div className="flex items-center justify-between px-5 pt-5 pb-4 flex-shrink-0">
+          <div>
+            <h3 className="text-base font-black" style={{ color: '#1A1A1A' }}>Categoria</h3>
+          </div>
+          <button onClick={onClose}
+            className="w-8 h-8 rounded-full flex items-center justify-center transition-all hover:bg-gray-100"
+            style={{ background: '#F3F4F6' }}>
+            <X size={15} style={{ color: '#6B7280' }} />
           </button>
         </div>
-        <div className="px-4 pt-2 pb-4 max-h-[60vh] overflow-y-auto">
+
+        <div className="mx-5 mb-3 h-px" style={{ background: '#F3F4F6' }} />
+
+        {/* List */}
+        <div className="px-3 py-2 overflow-y-auto flex-1">
           {cats.map(cat => {
             const active = value === cat;
             const color = CATEGORY_COLORS[cat];
             return (
-              <button key={cat} onClick={() => { onSelect(cat); onClose(); }}
-                className="w-full flex items-center gap-3 px-3 py-3 rounded-2xl mb-1 transition-all"
-                style={{ background: active ? color + '15' : 'transparent' }}>
-                <div className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0"
-                  style={{ background: active ? color : color + '20', color: active ? 'white' : color }}>
+              <motion.button key={cat}
+                whileTap={{ scale: 0.97 }}
+                onClick={() => onSelect(cat)}
+                className="w-full flex items-center gap-3 px-3 py-2.5 rounded-2xl mb-1 transition-all"
+                style={{ background: active ? color + '12' : 'transparent' }}>
+                <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 transition-all"
+                  style={{
+                    background: active ? color : color + '18',
+                    color: active ? 'white' : color,
+                    boxShadow: active ? `0 4px 12px ${color}40` : 'none',
+                  }}>
                   {CATEGORY_ICONS[cat]}
                 </div>
-                <span className="text-sm font-bold text-left flex-1"
-                  style={{ color: active ? color : '#1A1A1A' }}>
+                <span className="text-sm font-bold text-left flex-1 transition-all"
+                  style={{ color: active ? color : '#374151' }}>
                   {cat}
                 </span>
-                {active && <Check size={16} style={{ color }} />}
-              </button>
+                <div className="w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0 transition-all"
+                  style={{ background: active ? color : '#F3F4F6' }}>
+                  {active && <Check size={11} color="white" strokeWidth={3} />}
+                </div>
+              </motion.button>
             );
           })}
+        </div>
+
+        {/* Footer */}
+        <div className="px-4 pt-2 pb-5 flex-shrink-0">
+          <div className="h-px mb-4" style={{ background: '#F3F4F6' }} />
+          <motion.button
+            whileTap={{ scale: 0.97 }}
+            onClick={onClose}
+            className="w-full py-3.5 rounded-2xl text-white font-black text-sm flex items-center justify-center gap-2"
+            style={{ background: '#1B5E3B', boxShadow: '0 4px 16px rgba(27,94,59,0.3)' }}>
+            <Check size={16} strokeWidth={2.5} />
+            Confirmar
+          </motion.button>
         </div>
       </motion.div>
     </motion.div>
   );
 }
 
+function IconPickerSheet({ title, options, value, onSelect, onClose }: {
+  title: string;
+  options: { id: string; label: string; icon: React.ReactNode; color: string; subtitle?: string }[];
+  value: string;
+  onSelect: (v: string) => void;
+  onClose: () => void;
+}) {
+  return (
+    <motion.div
+      className="fixed z-50 flex items-center justify-center"
+      style={{ top: 0, bottom: 0, left: 'var(--sidebar-w, 0px)', right: 0 }}
+      initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+      <div className="absolute inset-0" style={{ background: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(4px)' }} onClick={onClose} />
+      <motion.div
+        className="relative flex flex-col"
+        style={{
+          width: 380, maxWidth: 'calc(100vw - 32px)', maxHeight: 'calc(80vh - 50px)',
+          background: 'white', borderRadius: 24,
+          boxShadow: '0 24px 64px rgba(0,0,0,0.18), 0 8px 24px rgba(0,0,0,0.1)',
+        }}
+        initial={{ opacity: 0, scale: 0.88, y: 16 }}
+        animate={{ opacity: 1, scale: 1, y: 0 }}
+        exit={{ opacity: 0, scale: 0.88, y: 16 }}
+        transition={{ duration: 0.2, ease: [0.34, 1.56, 0.64, 1] }}>
+
+        {/* Header */}
+        <div className="flex items-center justify-between px-5 pt-5 pb-4 flex-shrink-0">
+          <div>
+            <h3 className="text-base font-black" style={{ color: '#1A1A1A' }}>{title}</h3>
+          </div>
+          <button onClick={onClose}
+            className="w-8 h-8 rounded-full flex items-center justify-center transition-all"
+            style={{ background: '#F3F4F6' }}>
+            <X size={15} style={{ color: '#6B7280' }} />
+          </button>
+        </div>
+
+        <div className="mx-5 mb-3 h-px" style={{ background: '#F3F4F6' }} />
+
+        {/* List */}
+        <div className="px-3 py-2 overflow-y-auto flex-1">
+          {options.map(opt => {
+            const active = value === opt.id;
+            return (
+              <motion.button key={opt.id}
+                whileTap={{ scale: 0.97 }}
+                onClick={() => onSelect(opt.id)}
+                className="w-full flex items-center gap-3 px-3 py-2.5 rounded-2xl mb-1 transition-all"
+                style={{ background: active ? opt.color + '12' : 'transparent' }}>
+                <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 transition-all"
+                  style={{
+                    background: active ? opt.color : opt.color + '18',
+                    color: active ? 'white' : opt.color,
+                    boxShadow: active ? `0 4px 12px ${opt.color}40` : 'none',
+                  }}>
+                  {opt.icon}
+                </div>
+                <div className="flex-1 text-left">
+                  <p className="text-sm font-bold leading-tight transition-all"
+                    style={{ color: active ? opt.color : '#374151' }}>
+                    {opt.label}
+                  </p>
+                  {opt.subtitle && (
+                    <p className="text-xs mt-0.5 font-medium" style={{ color: '#9CA3AF' }}>{opt.subtitle}</p>
+                  )}
+                </div>
+                <div className="w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0 transition-all"
+                  style={{ background: active ? opt.color : '#F3F4F6' }}>
+                  {active && <Check size={11} color="white" strokeWidth={3} />}
+                </div>
+              </motion.button>
+            );
+          })}
+        </div>
+
+        {/* Footer */}
+        <div className="px-4 pt-2 pb-5 flex-shrink-0">
+          <div className="h-px mb-4" style={{ background: '#F3F4F6' }} />
+          <motion.button
+            whileTap={{ scale: 0.97 }}
+            onClick={onClose}
+            className="w-full py-3.5 rounded-2xl text-white font-black text-sm flex items-center justify-center gap-2"
+            style={{ background: '#1B5E3B', boxShadow: '0 4px 16px rgba(27,94,59,0.3)' }}>
+            <Check size={16} strokeWidth={2.5} />
+            Confirmar
+          </motion.button>
+        </div>
+      </motion.div>
+    </motion.div>
+  );
+}
+
+
 function PickerSheet({ title, options, value, onSelect, onClose }: {
   title: string; options: string[]; value: string;
   onSelect: (v: string) => void; onClose: () => void;
 }) {
   return (
-    <motion.div className="fixed inset-0 z-50 flex flex-col justify-end"
+    <motion.div
+      className="fixed z-50 flex items-center justify-center"
+      style={{ top: 0, bottom: 0, left: 'var(--sidebar-w, 0px)', right: 0 }}
       initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
-      <div className="absolute inset-0 bg-black/40" onClick={onClose} />
-      <motion.div className="relative bg-white rounded-t-3xl pb-8 flex flex-col" style={{ maxHeight: '75vh' }}
-        initial={{ y: '100%' }} animate={{ y: 0 }} exit={{ y: '100%' }}
-        transition={{ duration: 0.2, ease: 'easeOut' }}>
-        <div className="flex justify-center pt-3 pb-1"><div className="w-10 h-1 rounded-full bg-gray-200" /></div>
-        <div className="flex items-center justify-between px-5 py-3 border-b border-gray-100">
-          <h3 className="text-base font-black" style={{ color: '#1A1A1A' }}>{title}</h3>
-          <button onClick={onClose} className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center">
-            <X size={16} className="text-gray-500" />
+      <div className="absolute inset-0" style={{ background: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(4px)' }} onClick={onClose} />
+      <motion.div
+        className="relative flex flex-col"
+        style={{
+          width: 380, maxWidth: 'calc(100vw - 32px)', maxHeight: 'calc(80vh - 50px)',
+          background: 'white', borderRadius: 24,
+          boxShadow: '0 24px 64px rgba(0,0,0,0.18), 0 8px 24px rgba(0,0,0,0.1)',
+        }}
+        initial={{ opacity: 0, scale: 0.88, y: 16 }}
+        animate={{ opacity: 1, scale: 1, y: 0 }}
+        exit={{ opacity: 0, scale: 0.88, y: 16 }}
+        transition={{ duration: 0.2, ease: [0.34, 1.56, 0.64, 1] }}>
+
+        {/* Header */}
+        <div className="flex items-center justify-between px-5 pt-5 pb-4 flex-shrink-0">
+          <div>
+            <h3 className="text-base font-black" style={{ color: '#1A1A1A' }}>{title}</h3>
+          </div>
+          <button onClick={onClose}
+            className="w-8 h-8 rounded-full flex items-center justify-center"
+            style={{ background: '#F3F4F6' }}>
+            <X size={15} style={{ color: '#6B7280' }} />
           </button>
         </div>
-        <div className="px-4 pt-2 max-h-[60vh] overflow-y-auto pb-4">
+
+        <div className="mx-5 mb-3 h-px" style={{ background: '#F3F4F6' }} />
+
+        {/* List */}
+        <div className="px-3 pb-4 overflow-y-auto">
           {options.map(opt => (
-            <button key={opt} onClick={() => { onSelect(opt); onClose(); }}
-              className="w-full flex items-center justify-between px-4 py-3.5 rounded-2xl mb-1 transition-all"
+            <motion.button key={opt}
+              whileTap={{ scale: 0.97 }}
+              onClick={() => { onSelect(opt); onClose(); }}
+              className="w-full flex items-center justify-between px-4 py-3 rounded-2xl mb-1 transition-all"
               style={{ background: value === opt ? '#EEF7F0' : 'transparent' }}>
-              <span className="text-sm font-bold text-left" style={{ color: value === opt ? '#1B5E3B' : '#1A1A1A' }}>{opt}</span>
-              {value === opt && <Check size={16} style={{ color: '#1B5E3B' }} />}
-            </button>
+              <span className="text-sm font-bold text-left" style={{ color: value === opt ? '#1B5E3B' : '#374151' }}>
+                {opt}
+              </span>
+              <div className="w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0 transition-all"
+                style={{ background: value === opt ? '#1B5E3B' : '#F3F4F6' }}>
+                {value === opt && <Check size={11} color="white" strokeWidth={3} />}
+              </div>
+            </motion.button>
           ))}
         </div>
       </motion.div>
@@ -362,14 +552,11 @@ export default function AddLocal({
         description: desc.trim(),
         category:    backendCategory,
       };
-      if (tipo.trim())               payload.subcategory          = tipo.trim();
-      if (epoca.trim())              payload.best_season          = epoca.trim();
+      if (tipo.trim())               payload.subcategory          = (tipoOptions.find(o => o.id === tipo)?.label ?? tipo).trim();
+      if (epoca.trim())              payload.best_season          = (() => { const e = epocaOptions.find(o => o.id === epoca); return e ? `${e.label} (${e.subtitle})` : epoca; })();
       if (provincia.trim())          payload.province             = provincia.trim();
-      // district é o nível administrativo Distrito — enviado também como municipality para compatibilidade
-      if (district.trim()) {
-        payload.district             = district.trim();
-        payload.municipality         = district.trim(); // compatibilidade backend
-      }
+      // municipality = Distrito — campo correcto no LocalWriteRequest do OpenAPI
+      if (district.trim())           payload.municipality         = district.trim();
       if (administrativePost.trim()) payload.administrative_post  = administrativePost.trim();
       if (cidade.trim())             payload.locality             = cidade.trim();
       if (nearbyReference.trim())    payload.nearby_reference     = nearbyReference.trim();
@@ -393,24 +580,30 @@ export default function AddLocal({
         return;
       }
 
-      console.log('[AddLocal] ✅ Local criado (id:', data?.id, ')');
+      const localId = data?.local?.id ?? data?.id;
+      console.log('[AddLocal] ✅ Local criado (id:', localId, ')');
 
-      // Passo 2: Se há imagens, actualizar via PUT multipart com todos os campos + images
-      // O PUT multipart funciona porque reenvia TODOS os campos obrigatórios
-      if (photoFiles.length > 0 && data?.id) {
-        console.log('[AddLocal] Passo 2 — PUT multipart com imagens...');
+      // Passo 2: upload de imagens via POST /api/upload/images/ (context=local)
+      // + PUT multipart para associar ao local — dupla estratégia para máxima compatibilidade
+      if (photoFiles.length > 0 && localId) {
+        console.log('[AddLocal] Passo 2 — upload de imagens...');
+
+        // 2a. Upload dedicado → guarda no cache para exibição imediata
+        const uploadedUrls = await uploadAndCache(photoFiles.slice(0, 10), localId, 'local');
+        console.log('[AddLocal] Upload dedicado:', uploadedUrls.length, 'URL(s) obtidas');
+
+        // 2b. PUT multipart para associar imagens ao local no backend
+        console.log('[AddLocal] Passo 2b — PUT multipart com imagens...');
         const fd = new FormData();
         // Campos administrativos completos
         fd.append('name',        name.trim());
         fd.append('description', desc.trim());
         fd.append('category',    backendCategory);
-        if (tipo.trim())               fd.append('subcategory',         tipo.trim());
-        if (epoca.trim())              fd.append('best_season',         epoca.trim());
+        if (tipo.trim())               fd.append('subcategory',         (tipoOptions.find(o => o.id === tipo)?.label ?? tipo).trim());
+        if (epoca.trim())              fd.append('best_season',         (() => { const e = epocaOptions.find(o => o.id === epoca); return e ? `${e.label} (${e.subtitle})` : epoca; })());
         if (provincia.trim())          fd.append('province',            provincia.trim());
-        if (district.trim()) {
-          fd.append('district',            district.trim());
-          fd.append('municipality',        district.trim()); // compatibilidade
-        }
+        // municipality = Distrito (LocalWriteRequest do OpenAPI)
+        if (district.trim())           fd.append('municipality',        district.trim());
         if (administrativePost.trim()) fd.append('administrative_post', administrativePost.trim());
         if (cidade.trim())             fd.append('locality',            cidade.trim());
         if (nearbyReference.trim())    fd.append('nearby_reference',    nearbyReference.trim());
@@ -421,11 +614,34 @@ export default function AddLocal({
         if (destaques.length)          fd.append('highlights',          JSON.stringify(destaques));
         photoFiles.slice(0, 10).forEach(f => fd.append('images', f));
 
-        const { error: putErr } = await localsApi.update(data.id, fd);
+        const { data: putData, error: putErr } = await localsApi.update(localId, fd);
         if (putErr) {
-          console.warn('[AddLocal] ⚠️ Imagens não associadas:', extractErrorMsg(putErr));
+          console.warn('[AddLocal] ⚠️ PUT multipart falhou:', extractErrorMsg(putErr));
+          // Imagens do upload dedicado ainda estão no cache — continuar
         } else {
           console.log('[AddLocal] ✅ Imagens associadas via PUT');
+          // Guardar no cache as URLs que o backend devolveu na resposta do PUT
+          const putImages: string[] = Array.isArray(putData?.images)
+            ? putData.images.filter((u: any) => typeof u === 'string' && u.trim())
+            : [];
+          if (putImages.length > 0) {
+            cacheImages(localId, putImages);
+            console.log('[AddLocal] ✅ URLs do PUT guardadas no cache:', putImages);
+          }
+        }
+
+        // Passo 2c: GET ao local para obter imagens reais confirmadas pelo backend
+        try {
+          const { data: getData } = await localsApi.get(localId);
+          const backendImages: string[] = Array.isArray(getData?.images)
+            ? getData.images.filter((u: any) => typeof u === 'string' && u.trim())
+            : [];
+          if (backendImages.length > 0) {
+            cacheImages(localId, backendImages);
+            console.log('[AddLocal] ✅ URLs confirmadas pelo GET guardadas no cache:', backendImages);
+          }
+        } catch {
+          console.warn('[AddLocal] GET de confirmação falhou — cache mantém URLs do upload');
         }
       }
 
@@ -468,14 +684,14 @@ export default function AddLocal({
       <div className="px-4 pt-4 space-y-4 text-left max-w-2xl mx-auto">
 
         <div>
-          <label className="block text-sm font-black mb-1.5 text-left" style={{ color: '#1A1A1A' }}>Nome do lugar <span style={{ color: '#EF4444' }}>*</span></label>
+          <label className="block text-sm font-black mb-1.5 text-left" style={{ color: '#1A1A1A' }}>Nome do lugar</label>
           <input type="text" placeholder="Ex.: Praia do Tofo, Fortaleza de São Sebastião..." value={name} onChange={e => setName(e.target.value)}
             className="w-full px-4 py-3.5 rounded-2xl border bg-white text-sm focus:outline-none"
             style={{ borderColor: '#E5E7EB', color: '#1A1A1A', fontFamily: 'Nunito, sans-serif' }} />
         </div>
 
         <div>
-          <label className="block text-sm font-black mb-1.5 text-left" style={{ color: '#1A1A1A' }}>Categoria <span style={{ color: '#EF4444' }}>*</span></label>
+          <label className="block text-sm font-black mb-1.5 text-left" style={{ color: '#1A1A1A' }}>Categoria</label>
           <button onClick={() => setShowCat(true)} className="w-full flex items-center justify-between px-4 py-3 rounded-2xl border bg-white text-sm"
             style={{ borderColor: category ? (CATEGORY_COLORS[category] || '#E5E7EB') : '#E5E7EB', color: category ? '#1A1A1A' : '#9CA3AF' }}>
             <div className="flex items-center gap-2">
@@ -492,25 +708,56 @@ export default function AddLocal({
         </div>
 
         <div>
-          <label className="block text-sm font-black mb-1.5 text-left" style={{ color: '#1A1A1A' }}>Tipo de lugar <span style={{ color: '#EF4444' }}>*</span></label>
-          <button onClick={() => setShowTipo(true)} className="w-full flex items-center justify-between px-4 py-3.5 rounded-2xl border bg-white text-sm"
-            style={{ borderColor: '#E5E7EB', color: tipo ? '#1A1A1A' : '#9CA3AF' }}>
-            <span className="truncate">{tipo || 'Selecione...'}</span>
+          <label className="block text-sm font-black mb-1.5 text-left" style={{ color: '#1A1A1A' }}>Tipo de lugar</label>
+          <button onClick={() => setShowTipo(true)} className="w-full flex items-center justify-between px-4 py-3 rounded-2xl border bg-white text-sm"
+            style={{ borderColor: tipo ? (tipoOptions.find(t => t.id === tipo)?.color || '#E5E7EB') : '#E5E7EB', color: tipo ? '#1A1A1A' : '#9CA3AF' }}>
+            <div className="flex items-center gap-2">
+              {tipo && (() => {
+                const t = tipoOptions.find(o => o.id === tipo);
+                return t ? (
+                  <div className="w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0"
+                    style={{ background: t.color + '20', color: t.color }}>
+                    {t.icon}
+                  </div>
+                ) : null;
+              })()}
+              <span className="font-semibold">{tipo || 'Selecione o tipo de lugar...'}</span>
+            </div>
             <ChevronDown size={16} className="text-gray-400 flex-shrink-0" />
           </button>
         </div>
 
         <div>
-          <label className="block text-sm font-black mb-1.5 text-left" style={{ color: '#1A1A1A' }}>Melhor época para visitar <span style={{ color: '#EF4444' }}>*</span></label>
-          <button onClick={() => setShowEpoca(true)} className="w-full flex items-center justify-between px-4 py-3.5 rounded-2xl border bg-white text-sm"
-            style={{ borderColor: '#E5E7EB', color: epoca ? '#1A1A1A' : '#9CA3AF' }}>
-            <span className="truncate text-left flex-1">{epoca || 'Selecione a melhor época...'}</span>
+          <label className="block text-sm font-black mb-1.5 text-left" style={{ color: '#1A1A1A' }}>Melhor época para visitar</label>
+          <button onClick={() => setShowEpoca(true)} className="w-full flex items-center justify-between px-4 py-3 rounded-2xl border bg-white text-sm"
+            style={{ borderColor: epoca ? (epocaOptions.find(e => e.id === epoca)?.color || '#E5E7EB') : '#E5E7EB', color: epoca ? '#1A1A1A' : '#9CA3AF' }}>
+            <div className="flex items-center gap-2">
+              {epoca && (() => {
+                const e = epocaOptions.find(o => o.id === epoca);
+                return e ? (
+                  <div className="w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0"
+                    style={{ background: e.color + '20', color: e.color }}>
+                    {e.icon}
+                  </div>
+                ) : null;
+              })()}
+              <div className="text-left">
+                <span className="font-semibold block leading-tight">
+                  {epoca ? epocaOptions.find(o => o.id === epoca)?.label : 'Selecione a melhor época...'}
+                </span>
+                {epoca && epocaOptions.find(o => o.id === epoca)?.subtitle && (
+                  <span className="text-xs" style={{ color: '#9CA3AF' }}>
+                    {epocaOptions.find(o => o.id === epoca)?.subtitle}
+                  </span>
+                )}
+              </div>
+            </div>
             <ChevronDown size={16} className="text-gray-400 flex-shrink-0 ml-2" />
           </button>
         </div>
 
         <div>
-          <label className="block text-sm font-black mb-1.5 text-left" style={{ color: '#1A1A1A' }}>Destaques <span style={{ color: '#EF4444' }}>*</span></label>
+          <label className="block text-sm font-black mb-1.5 text-left" style={{ color: '#1A1A1A' }}>Destaques</label>
           <button onClick={() => setShowDest(true)} className="w-full flex items-center justify-between px-4 py-3.5 rounded-2xl border bg-white text-sm"
             style={{ borderColor: '#E5E7EB', color: destaques.length ? '#1A1A1A' : '#9CA3AF' }}>
             <span className="truncate flex-1 text-left">
@@ -532,7 +779,7 @@ export default function AddLocal({
         </div>
 
         <div>
-          <label className="block text-sm font-black mb-1.5 text-left" style={{ color: '#1A1A1A' }}>Descrição <span style={{ color: '#EF4444' }}>*</span></label>
+          <label className="block text-sm font-black mb-1.5 text-left" style={{ color: '#1A1A1A' }}>Descrição</label>
           <div className="relative">
             <textarea placeholder="O que torna este lugar único? Conte a sua história, curiosidades, dicas..." value={desc}
               onChange={e => setDesc(e.target.value.slice(0, 1000))} rows={4}
@@ -585,40 +832,80 @@ export default function AddLocal({
 
       <AnimatePresence>
         {showCat && <CategoryPickerSheet value={category} onSelect={setCategory} onClose={() => setShowCat(false)} />}
-        {showTipo && <PickerSheet title="Tipo de lugar" options={tipoOptions} value={tipo} onSelect={setTipo} onClose={() => setShowTipo(false)} />}
-        {showEpoca && <PickerSheet title="Melhor época para visitar" options={epocaOptions} value={epoca} onSelect={setEpoca} onClose={() => setShowEpoca(false)} />}
+        {showTipo && <IconPickerSheet title="Tipo de lugar" options={tipoOptions} value={tipo} onSelect={setTipo} onClose={() => setShowTipo(false)} />}
+        {showEpoca && <IconPickerSheet title="Melhor época para visitar" options={epocaOptions} value={epoca} onSelect={setEpoca} onClose={() => setShowEpoca(false)} />}
         {showDest && (
-          <motion.div className="fixed inset-0 z-50 flex flex-col justify-end" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
-            <div className="absolute inset-0 bg-black/40" onClick={() => setShowDest(false)} />
-            <motion.div className="relative bg-white rounded-t-3xl pb-8" initial={{ y: '100%' }} animate={{ y: 0 }} exit={{ y: '100%' }} transition={{ duration: 0.2, ease: 'easeOut' }}>
-              <div className="flex justify-center pt-3 pb-1"><div className="w-10 h-1 rounded-full bg-gray-200" /></div>
-              <div className="flex items-center justify-between px-5 py-3 border-b border-gray-100">
+          <motion.div
+            className="fixed z-50 flex items-center justify-center"
+            style={{ top: 0, bottom: 0, left: 'var(--sidebar-w, 0px)', right: 0 }}
+            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+            <div className="absolute inset-0" style={{ background: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(4px)' }} onClick={() => setShowDest(false)} />
+            <motion.div
+              className="relative flex flex-col"
+              style={{
+                width: 380, maxWidth: 'calc(100vw - 32px)', maxHeight: 'calc(80vh - 50px)',
+                background: 'white', borderRadius: 24,
+                boxShadow: '0 24px 64px rgba(0,0,0,0.18), 0 8px 24px rgba(0,0,0,0.1)',
+              }}
+              initial={{ opacity: 0, scale: 0.88, y: 16 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.88, y: 16 }}
+              transition={{ duration: 0.2, ease: [0.34, 1.56, 0.64, 1] }}>
+
+              {/* Header */}
+              <div className="flex items-center justify-between px-5 pt-5 pb-4 flex-shrink-0">
                 <h3 className="text-base font-black" style={{ color: '#1A1A1A' }}>Destaques</h3>
-                <button onClick={() => setShowDest(false)} className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center"><X size={16} className="text-gray-500" /></button>
+                <button onClick={() => setShowDest(false)}
+                  className="w-8 h-8 rounded-full flex items-center justify-center"
+                  style={{ background: '#F3F4F6' }}>
+                  <X size={15} style={{ color: '#6B7280' }} />
+                </button>
               </div>
-              <div className="px-4 pt-2 max-h-72 overflow-y-auto">
+
+              <div className="mx-5 mb-1 h-px" style={{ background: '#F3F4F6' }} />
+
+              {/* List */}
+              <div className="px-3 py-2 overflow-y-auto">
                 {destaquesOptions.map(opt => {
                   const active = destaques.includes(opt.id);
                   return (
-                    <button key={opt.id} onClick={() => toggleDest(opt.id)}
-                      className="w-full flex items-center justify-between px-4 py-3.5 rounded-2xl mb-1 transition-all"
-                      style={{ background: active ? '#EEF7F0' : 'transparent' }}>
-                      <div className="flex items-center gap-3">
-                        <span className="text-xl">{opt.icon}</span>
-                        <span className="text-sm font-bold" style={{ color: active ? '#1B5E3B' : '#1A1A1A' }}>{opt.label}</span>
+                    <motion.button key={opt.id}
+                      whileTap={{ scale: 0.97 }}
+                      onClick={() => toggleDest(opt.id)}
+                      className="w-full flex items-center gap-3 px-3 py-2.5 rounded-2xl mb-1 transition-all"
+                      style={{ background: active ? '#EEF7F012' : 'transparent' }}>
+                      <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 transition-all"
+                        style={{
+                          background: active ? '#1B5E3B' : '#1B5E3B18',
+                          color: active ? 'white' : '#1B5E3B',
+                          boxShadow: active ? '0 4px 12px rgba(27,94,59,0.35)' : 'none',
+                        }}>
+                        {opt.icon}
                       </div>
-                      <div className="w-5 h-5 rounded flex items-center justify-center border-2 transition-all"
-                        style={{ background: active ? '#1B5E3B' : 'white', borderColor: active ? '#1B5E3B' : '#D1D5DB' }}>
-                        {active && <Check size={12} className="text-white" />}
+                      <span className="text-sm font-bold flex-1 text-left transition-all"
+                        style={{ color: active ? '#1B5E3B' : '#374151' }}>
+                        {opt.label}
+                      </span>
+                      <div className="w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0 transition-all"
+                        style={{ background: active ? '#1B5E3B' : '#F3F4F6' }}>
+                        {active && <Check size={11} color="white" strokeWidth={3} />}
                       </div>
-                    </button>
+                    </motion.button>
                   );
                 })}
               </div>
-              <div className="px-4 pt-3">
-                <button onClick={() => setShowDest(false)} className="w-full py-3.5 rounded-2xl text-white font-black text-sm" style={{ background: '#1B5E3B' }}>
-                  Confirmar ({destaques.length} selecionados)
-                </button>
+
+              {/* Footer */}
+              <div className="px-4 pt-2 pb-5 flex-shrink-0">
+                <div className="h-px mb-4" style={{ background: '#F3F4F6' }} />
+                <motion.button
+                  whileTap={{ scale: 0.97 }}
+                  onClick={() => setShowDest(false)}
+                  className="w-full py-3.5 rounded-2xl text-white font-black text-sm flex items-center justify-center gap-2"
+                  style={{ background: '#1B5E3B', boxShadow: '0 4px 16px rgba(27,94,59,0.3)' }}>
+                  <Check size={16} strokeWidth={2.5} />
+                  Confirmar {destaques.length > 0 && `(${destaques.length})`}
+                </motion.button>
               </div>
             </motion.div>
           </motion.div>
@@ -638,9 +925,6 @@ export default function AddLocal({
           <p className="text-sm font-black flex items-center gap-2" style={{ color: '#1A1A1A' }}>
             <MapPin size={16} style={{ color: '#1B5E3B' }} />
             Localização
-          </p>
-          <p className="text-xs mt-0.5" style={{ color: '#9CA3AF' }}>
-            Usa o GPS, clica no mapa ou pesquisa para definir a localização do lugar.
           </p>
         </div>
 
@@ -797,7 +1081,7 @@ export default function AddLocal({
     return <SubmissionSuccessScreen entityType="Local" onSuccess={onSuccess} />;
   }
 
-  const catLabel = category || '—';  const tipoLabel = tipo || '—';
+  const catLabel = category || '—';  const tipoLabel = tipoOptions.find(o => o.id === tipo)?.label || tipo || '—';
   const provLabel = provincia || '—';
 
   return (
@@ -834,7 +1118,7 @@ export default function AddLocal({
             { k: 'Nome', v: name || '—' },
             { k: 'Categoria', v: catLabel },
             { k: 'Tipo', v: tipoLabel },
-            { k: 'Melhor época', v: epoca || '—' },
+            { k: 'Melhor época', v: (() => { const e = epocaOptions.find(o => o.id === epoca); return e ? `${e.label} · ${e.subtitle}` : '—'; })() },
           ]},
           { label: 'Localização', items: [
             { k: 'País', v: country || 'Moçambique' },

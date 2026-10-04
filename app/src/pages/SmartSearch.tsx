@@ -27,13 +27,8 @@ export default function SmartSearch({
   const [history, setHistory] = useState<string[]>([]);
   const [isLoading, setIsLoading] = useState(false);
 
-  // Load search history
-  useEffect(() => {
-    const saved = localStorage.getItem('search_history');
-    if (saved) {
-      setHistory(JSON.parse(saved));
-    }
-  }, []);
+  // Histórico de pesquisa em memória (sessão actual)
+  useEffect(() => {}, []);
 
   // Debounced search
   const performSearch = useCallback(async (searchQuery: string) => {
@@ -128,7 +123,6 @@ export default function SmartSearch({
         ...history.filter(h => h !== searchQuery),
       ].slice(0, 10);
       setHistory(newHistory);
-      localStorage.setItem('search_history', JSON.stringify(newHistory));
     }
   };
 
@@ -140,7 +134,6 @@ export default function SmartSearch({
 
   const clearHistory = () => {
     setHistory([]);
-    localStorage.removeItem('search_history');
   };
 
   return (

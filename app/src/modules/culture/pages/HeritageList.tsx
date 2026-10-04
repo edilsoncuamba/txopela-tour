@@ -4,8 +4,8 @@ import { ChevronLeft, Search, X, SlidersHorizontal, MapPin, Images } from 'lucid
 import { cultureApi } from '../api';
 import type { CulturalHeritage, ProvinceInfo } from '../types';
 import { PLACEHOLDER_IMAGE } from '@/utils/dataValidation';
-
 import { useScrollTop } from '@/hooks/useScrollTop';
+import { useTheme } from '@/context/ThemeContext';
 
 interface HeritageListProps {
   province: ProvinceInfo;
@@ -24,6 +24,20 @@ const CLASS_COLOR: Record<string, string> = {
 
 export default function HeritageList({ province, onBack, onHeritageSelect }: HeritageListProps) {
   useScrollTop();
+  const { isDark } = useTheme();
+  const dm = {
+    bg:      isDark ? '#0F1117' : '#F5F5F0',
+    surface: isDark ? '#1A1D27' : '#ffffff',
+    border:  isDark ? 'rgba(255,255,255,0.07)' : '#F3F4F6',
+    text:    isDark ? '#F0F4FF' : '#1A1A1A',
+    text2:   isDark ? '#6B7A99' : '#9CA3AF',
+    back:    isDark ? '#22263A' : '#F3F4F6',
+    input:   isDark ? '#22263A' : '#F8FAFC',
+    inputBorder: isDark ? 'rgba(255,255,255,0.1)' : '#E2E8F0',
+    skel:    isDark ? '#22263A' : '#E5E7EB',
+    pill:    isDark ? '#22263A' : '#ffffff',
+    pillBorder: isDark ? 'rgba(255,255,255,0.08)' : '#E5E7EB',
+  };
   const [heritage, setHeritage]         = useState<CulturalHeritage[]>([]);
   const [isLoading, setIsLoading]       = useState(true);
   const [error, setError]               = useState<string | null>(null);
@@ -68,25 +82,27 @@ export default function HeritageList({ province, onBack, onHeritageSelect }: Her
 
   return (
     <motion.div
-      className="min-h-screen pb-24"
-      style={{ background: '#F5F5F0', fontFamily: 'Nunito, sans-serif' }}
+      className="pb-6"
+      style={{ background: dm.bg, fontFamily: 'Nunito, sans-serif' }}
       initial={{ opacity: 0, y: 10 }}
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: 6 }}
       transition={{ duration: 0.2, ease: 'easeOut' }}
     >
       {/* ── HEADER ────────────────────────────────────────────────────────── */}
-      <div className="sticky top-0 z-30 bg-white border-b border-gray-100 px-4 pt-5 pb-3">
+      <div className="sticky top-0 z-30 px-4 pt-5 pb-3"
+        style={{ background: dm.surface, borderBottom: `1px solid ${dm.border}` }}>
         <div className="flex items-center gap-3 mb-3">
           <button onClick={onBack}
-            className="w-9 h-9 bg-gray-100 rounded-full flex items-center justify-center flex-shrink-0">
-            <ChevronLeft size={20} style={{ color: '#1A1A1A' }} strokeWidth={2.5} />
+            className="w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0"
+            style={{ background: dm.back }}>
+            <ChevronLeft size={20} style={{ color: dm.text }} strokeWidth={2.5} />
           </button>
           <div className="flex-1 text-left">
-            <h1 className="text-lg font-black leading-tight" style={{ color: '#1A1A1A' }}>
+            <h1 className="text-lg font-black leading-tight" style={{ color: dm.text }}>
               {province.name}
             </h1>
-            <p className="text-xs" style={{ color: '#9CA3AF' }}>
+            <p className="text-xs" style={{ color: dm.text2 }}>
               {isLoading ? 'A carregar...' : `${displayed.length} ${displayed.length === 1 ? 'património' : 'patrimónios'}`}
             </p>
           </div>
@@ -106,21 +122,13 @@ export default function HeritageList({ province, onBack, onHeritageSelect }: Her
 
         {/* Search */}
         <div className="flex items-center gap-2 px-3 py-2.5 rounded-xl border"
-          style={{ background: '#F8FAFC', borderColor: '#E2E8F0' }}>
-          <Search size={14} className="text-gray-400 flex-shrink-0" />
-          <input
-            type="text"
-            placeholder="Pesquisar património..."
-            value={search}
-            onChange={e => setSearch(e.target.value)}
+          style={{ background: dm.input, borderColor: dm.inputBorder }}>
+          <Search size={14} style={{ color: dm.text2, flexShrink: 0 }} />
+          <input type="text" placeholder="Pesquisar património..."
+            value={search} onChange={e => setSearch(e.target.value)}
             className="flex-1 text-sm bg-transparent focus:outline-none"
-            style={{ color: '#1A1A1A' }}
-          />
-          {search && (
-            <button onClick={() => setSearch('')}>
-              <X size={13} className="text-gray-400" />
-            </button>
-          )}
+            style={{ color: dm.text }} />
+          {search && <button onClick={() => setSearch('')}><X size={13} style={{ color: dm.text2 }} /></button>}
         </div>
 
         {/* Filters panel */}

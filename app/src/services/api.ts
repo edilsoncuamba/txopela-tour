@@ -19,7 +19,8 @@
 //  GET/POST /api/locals/
 //  GET/PUT/DELETE /api/locals/{id}/
 //  GET/POST /api/locals/{id}/reviews/
-//  GET    /api/locals/geocode/
+//  GET    /api/locals/geocode/            ← reverse geocoding completo (province+district+locality)
+//  GET    /api/locals/reverse-geocode/    ← reverse geocoding simples (province+city apenas)
 //  POST   /api/reviews/{id}/helpful/
 //  GET/POST /api/services/
 //  GET/PUT/DELETE /api/services/{id}/
@@ -61,6 +62,7 @@ import type {
 } from '@/types/api';
 
 import { backendConfig } from '@/config/backend';
+import { tokenStore } from '@/services/tokenStore';
 
 // ── Base URL ──────────────────────────────────────────────────────────────────
 const getBaseUrl = () => {
@@ -71,8 +73,9 @@ const getBaseUrl = () => {
 
 interface ApiResponse<T> { data?: T; error?: string; }
 
-const getToken   = () => localStorage.getItem('access_token');
-const getRefresh = () => localStorage.getItem('refresh_token');
+// Tokens em memória via tokenStore — sem localStorage
+const getToken   = () => tokenStore.getAccess();
+const getRefresh = () => tokenStore.getRefresh();
 
 // ── Refresh (OpenAPI: POST /api/auth/refresh/ body: { refreshToken }) ─────────
 async function doRefresh(): Promise<boolean> {
@@ -88,14 +91,14 @@ async function doRefresh(): Promise<boolean> {
     const raw = await res.json();
     // Suporta envelope { status, code, data, meta }
     const d = (raw && typeof raw === 'object' && 'data' in raw && raw.data !== undefined) ? raw.data : raw;
-    if (d.token)        localStorage.setItem('access_token',  d.token);
-    if (d.refreshToken) localStorage.setItem('refresh_token', d.refreshToken);
-    return true;
+    if (d.token && d.refreshToken) tokenStore.set({ token: d.token, refreshToken: d.refreshToken });
+    return !!(d.token);
   } catch { return false; }
 }
 
 // ── fetch helpers ─────────────────────────────────────────────────────────────
-function withTimeout(url: string, opts: RequestInit, ms = 15_000): Promise<Response> {
+function withTimeout(url: string, opts: RequestInit, ms?: number): Promise<Response> {
+  if (!ms) return fetch(url, opts);
   const ctrl  = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), ms);
   return fetch(url, { ...opts, signal: ctrl.signal }).finally(() => clearTimeout(timer));
@@ -121,8 +124,7 @@ async function apiFetch<T>(
     if (res.status === 401 && retry) {
       const ok = await doRefresh();
       if (ok) return apiFetch(endpoint, opts, false);
-      localStorage.removeItem('access_token');
-      localStorage.removeItem('refresh_token');
+      tokenStore.clear();
       return { error: 'Sessão expirada. Faz login novamente.' };
     }
     if (res.status === 403) return { error: 'Sem permissão para esta operação.' };
@@ -197,20 +199,43 @@ async function apiMultipart<T>(
   const t = getToken();
   if (t) hdrs['Authorization'] = `Bearer ${t}`;
   try {
-    const res = await withTimeout(url, { method, headers: hdrs, body: fd }, 30_000);
+    const res = await withTimeout(url, { method, headers: hdrs, body: fd });
 
     if (res.status === 401 && retry) {
       const ok = await doRefresh();
       if (ok) return apiMultipart(endpoint, method, fd, false);
-      localStorage.removeItem('access_token');
-      localStorage.removeItem('refresh_token');
+      tokenStore.clear();
       return { error: 'Sessão expirada. Faz login novamente.' };
     }
 
     if (!res.ok) {
       const err = await res.json().catch(() => ({}));
       console.error(`[apiMultipart] ${res.status} ${method} ${endpoint}:`, err);
-      return { error: err };
+
+      // Extrair mensagem como string — nunca devolver um objecto (consistente com apiFetch)
+      let msg: string =
+        (typeof err.detail  === 'string' ? err.detail  : null) ||
+        (typeof err.error   === 'string' ? err.error   : null) ||
+        (typeof err.message === 'string' ? err.message : null) ||
+        '';
+
+      if (!msg && err.details) {
+        msg = typeof err.details === 'string'
+          ? err.details
+          : Object.entries(err.details as Record<string, unknown>)
+              .map(([k, v]) => `${k}: ${Array.isArray(v) ? v.join(', ') : String(v)}`)
+              .join(' | ');
+      }
+
+      if (!msg) {
+        msg = Object.values(err as Record<string, unknown>)
+          .flat()
+          .map(v => (typeof v === 'string' ? v : typeof v === 'object' ? JSON.stringify(v) : String(v)))
+          .filter(Boolean)
+          .join(', ') || `Erro ${res.status}`;
+      }
+
+      return { error: msg };
     }
 
     const body = await res.json();
@@ -247,8 +272,7 @@ export const authApi = {
     );
     // Suporta resposta directa e envelope { status, code, data, meta }
     const d = (raw && typeof raw === 'object' && 'data' in raw && raw.data !== undefined) ? raw.data : raw;
-    if (d.token)        localStorage.setItem('access_token',  d.token);
-    if (d.refreshToken) localStorage.setItem('refresh_token', d.refreshToken);
+    if (d.token && d.refreshToken) tokenStore.set({ token: d.token, refreshToken: d.refreshToken });
     return d;
   },
 
@@ -270,8 +294,7 @@ export const authApi = {
     );
     // Suporta resposta directa e envelope { status, code, data, meta }
     const d = (raw && typeof raw === 'object' && 'data' in raw && raw.data !== undefined) ? raw.data : raw;
-    if (d.token)        localStorage.setItem('access_token',  d.token);
-    if (d.refreshToken) localStorage.setItem('refresh_token', d.refreshToken);
+    if (d.token && d.refreshToken) tokenStore.set({ token: d.token, refreshToken: d.refreshToken });
     return d as RegisterResponse;
   },
 
@@ -289,8 +312,7 @@ export const authApi = {
       const body: LogoutRequest = refreshToken ? { refreshToken } : {};
       await apiFetch('/api/auth/logout/', { method: 'POST', body: JSON.stringify(body) });
     } catch { /* logout silencioso */ } finally {
-      ['access_token', 'refresh_token', 'txopela_token', 'txopela_user']
-        .forEach(k => localStorage.removeItem(k));
+      tokenStore.clear();
     }
   },
 
@@ -511,9 +533,25 @@ export const localsApi = {
   addReview: (id: string, body: LocalReviewWriteRequest) =>
     apiFetch<any>(`/api/locals/${id}/reviews/`, { method: 'POST', body: JSON.stringify(body) }),
 
-  /** GET /api/locals/geocode/?lat=&lon= */
+  /**
+   * GET /api/locals/geocode/?lat=&lon=
+   * OpenAPI operationId: locals_geocode_retrieve
+   * Converte coordenadas GPS em endereço estruturado completo.
+   * Resposta: GeocodeResponse { province, district, locality, country, address, displayName }
+   * NOTA: parâmetros são `lat` e `lon` (não `latitude`/`longitude`).
+   *       Este é o endpoint correcto para o LocationPicker — inclui `district`.
+   */
   geocode: (lat: number, lon: number) =>
     apiFetch<any>(`/api/locals/geocode/?lat=${lat}&lon=${lon}`),
+
+  /**
+   * GET /api/locals/reverse-geocode/?latitude=&longitude=
+   * OpenAPI operationId: locals_reverse_geocode_retrieve
+   * Reverse geocoding com cache — resposta: ReverseGeocodeData { province, city }
+   * Incompleto (sem district) — usar geocode() em vez deste para o LocationPicker.
+   */
+  reverseGeocode: (latitude: number, longitude: number) =>
+    apiFetch<any>(`/api/locals/reverse-geocode/?latitude=${latitude}&longitude=${longitude}`),
 
   /**
    * GET /api/locals/nearby/
@@ -534,6 +572,18 @@ export const localsApi = {
   /** POST /api/reviews/{id}/helpful/ */
   markReviewHelpful: (reviewId: string) =>
     apiFetch<ReviewHelpfulResponse>(`/api/reviews/${reviewId}/helpful/`, { method: 'POST' }),
+
+  /**
+   * GET /api/locals/search/?q=&category=&min_rating=
+   * Pesquisa de locais com autocomplete, cache e filtros (schema: SearchResponse).
+   * Usar em vez do Nominatim externo para pesquisa de locais dentro da app.
+   */
+  search: (q: string, category?: string, minRating?: number) => {
+    const params = new URLSearchParams({ q });
+    if (category)  params.append('category',   category);
+    if (minRating) params.append('min_rating',  String(minRating));
+    return apiFetch<any>(`/api/locals/search/?${params}`);
+  },
 
   // Convenience
   getSaved:    () => localsApi.list({ sortBy: 'popular' }),
@@ -832,10 +882,11 @@ export const reviewsApi = {
    * Cria review para um local.
    * Body: { rating: 1-5 (obrigatório), comment: string (obrigatório) }
    */
-  createForLocal: (localId: string, body: { rating: number; comment: string; images?: string[] }) =>
+  createForLocal: (localId: string, body: { rating: number; comment: string }) =>
     apiFetch<any>(`/api/locals/${localId}/reviews/`, {
       method: 'POST',
-      body: JSON.stringify(body),
+      // Enviar apenas os campos definidos no schema: { rating, comment }
+      body: JSON.stringify({ rating: body.rating, comment: body.comment }),
     }),
 
   // ── Reviews para Serviços ───────────────────────────────────────────────────
@@ -856,10 +907,11 @@ export const reviewsApi = {
    * Cria review para um serviço.
    * Body: { rating: 1-5 (obrigatório), comment: string (obrigatório) }
    */
-  createForService: (serviceId: string, body: { rating: number; comment: string; images?: string[] }) =>
+  createForService: (serviceId: string, body: { rating: number; comment: string }) =>
     apiFetch<any>(`/api/services/${serviceId}/reviews/`, {
       method: 'POST',
-      body: JSON.stringify(body),
+      // Enviar apenas os campos definidos no schema: { rating, comment }
+      body: JSON.stringify({ rating: body.rating, comment: body.comment }),
     }),
 
   // ── Interações com Reviews ──────────────────────────────────────────────────
@@ -1027,103 +1079,112 @@ export const adminApi = {
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
-// FAVORITES — save/unsave APENAS para posts (baseado no openapi-schema.yaml)
+// FAVORITES — baseado ESTRITAMENTE no openapi-schema(3).yaml
 //
-// ANÁLISE DA API ATUAL:
-// ✅ POST /api/posts/{id}/save/    → FUNCIONA (confirmado no openapi-schema.yaml)
-// ✅ DELETE /api/posts/{id}/save/  → FUNCIONA (confirmado no openapi-schema.yaml)
-// FAVORITOS — baseado no openapi-schema.yaml (fonte de verdade do servidor remoto)
+// O QUE O SCHEMA DEFINE:
+//   POST   /api/locals/{id}/save/    → LocalSaveResponse       { success, hasSaved }
+//   DELETE /api/locals/{id}/save/    → LocalRemoveSaveResponse  { success, hasSaved }
+//   POST   /api/posts/{id}/save/     → PostSaveResponse         { success, hasSaved }
+//   DELETE /api/posts/{id}/save/     → PostSaveResponse         { success, hasSaved }
+//   POST   /api/services/{id}/save/  → ServiceSaveResponse      { success, hasSaved }
+//   DELETE /api/services/{id}/save/  → ServiceRemoveSaveResponse{ success, hasSaved }
 //
-// ✅ POST   /api/posts/{id}/save/  → Guarda post         → { success, hasSaved: true }
-// ✅ DELETE /api/posts/{id}/save/  → Remove post guardado → { success, hasSaved: false }
-// ✅ GET    /api/posts/            → Devolve userInteraction.hasSaved por post
-// ❌ Nenhum endpoint de save para locais ou serviços existe no servidor remoto
+// O QUE O SCHEMA NÃO DEFINE (não implementar):
+//   ❌ GET /api/locals/saved/     — não existe no schema
+//   ❌ GET /api/services/saved/   — não existe no schema
+//   ❌ userInteraction em LocalList/LocalDetail/ServiceList/ServiceDetail — não existe
 //
-// ESTRATÉGIA:
-// - Posts: toggle via POST/DELETE. Estado inicial carregado de GET /api/posts/
-//   filtrando userInteraction.hasSaved === true (único mecanismo disponível).
-// - Locais/Serviços: apenas estado em memória durante a sessão.
-//   Sem persistência — não existe backend para tal.
+// APENAS PostList/PostDetail têm userInteraction.hasSaved (schema confirma).
+//
+// FLUXO:
+//   toggle(item) → POST ou DELETE → API devolve { success, hasSaved }
+//   hasSaved:true  → item está guardado no servidor
+//   hasSaved:false → item foi removido do servidor
 // ─────────────────────────────────────────────────────────────────────────────
 export const favoritesApi = {
   /**
-   * Carrega favoritos do utilizador autenticado.
-   * - Locais: GET /api/locals/ filtrando userInteraction.hasSaved === true
-   *   (GET /api/locals/saved/ não existe no OpenAPI)
-   * - Posts:  GET /api/posts/ filtrando userInteraction.hasSaved === true
+   * Carrega posts guardados do utilizador autenticado.
+   * Apenas posts têm userInteraction.hasSaved no schema.
+   * Locais e serviços não têm endpoint GET /saved/ — estado gerido via toggle.
    */
-  getAll: async (): Promise<{ posts: any[]; locals: any[]; services: any[] }> => {
-    const [localsResult, postsResult] = await Promise.allSettled([
-      // Locais guardados — percorre lista filtrando hasSaved
-      (async () => {
-        const saved: any[] = [];
-        let page = 1;
-        let hasMore = true;
-        while (hasMore && page <= 5) {
-          const res = await apiFetch<any>(`/api/locals/?sortBy=popular&limit=50&page=${page}`);
-          if (res.error || !res.data) break;
-          const raw = res.data;
-          const items: any[] = Array.isArray(raw) ? raw : (raw.locals ?? raw.results ?? []);
-          items.forEach((l: any) => {
-            if (l.userInteraction?.hasSaved === true || l.is_saved === true) saved.push(l);
-          });
-          const pagination = Array.isArray(raw) ? null : (raw.pagination ?? raw.meta?.pagination ?? null);
-          hasMore = pagination?.hasNext ?? (items.length === 50);
-          page++;
-        }
-        return saved;
-      })(),
-      // Posts guardados — percorre lista filtrando hasSaved
-      (async () => {
-        const saved: any[] = [];
-        let page = 1;
-        let hasMore = true;
-        while (hasMore && page <= 10) {
-          const res = await apiFetch<any>(`/api/posts/?sortBy=recent&limit=50&page=${page}`);
-          if (res.error || !res.data) break;
-          const raw = res.data;
-          const items: any[] = Array.isArray(raw) ? raw : (raw.posts ?? raw.results ?? raw.data ?? []);
-          items.forEach((p: any) => {
-            if (p.userInteraction?.hasSaved === true || p.is_saved === true) saved.push(p);
-          });
-          const pagination = Array.isArray(raw) ? null : (raw.pagination ?? raw.meta ?? null);
-          hasMore = pagination?.hasNext ?? (items.length === 50);
-          page++;
-        }
-        return saved;
-      })(),
-    ]);
-
-    const locals = localsResult.status === 'fulfilled' ? localsResult.value : [];
-    const posts  = postsResult.status  === 'fulfilled' ? postsResult.value  : [];
-
-    return { posts, locals, services: [] };
+  /**
+   * Carrega posts guardados do utilizador autenticado.
+   * PostList tem userInteraction.hasSaved (confirmado no schema).
+   * A API envolve em { status, code, data, meta } — apiFetch já extrai data.
+   * Paginação está em meta.pagination (confirmado nos testes ao vivo).
+   * Locais e serviços NÃO têm userInteraction — sem endpoint GET /saved/.
+   */
+  getSavedPosts: async (): Promise<any[]> => {
+    const saved: any[] = [];
+    let page = 1;
+    let hasMore = true;
+    while (hasMore && page <= 20) {
+      const res = await apiFetch<any>(`/api/posts/?sortBy=recent&limit=50&page=${page}`);
+      if (res.error || !res.data) break;
+      // apiFetch extrai o campo .data do envelope — raw é o conteúdo de data
+      const raw = res.data;
+      const items: any[] = Array.isArray(raw) ? raw : (raw.posts ?? raw.results ?? []);
+      items.forEach((p: any) => {
+        if (p.userInteraction?.hasSaved === true) saved.push(p);
+      });
+      // Paginação confirmada ao vivo: vem em meta.pagination dentro do envelope
+      // apiFetch devolve só o .data, por isso precisamos de aceder via res diretamente
+      // Usamos o tamanho da lista como heurística segura
+      hasMore = items.length === 50;
+      page++;
+    }
+    return saved;
   },
 
+  // ── Locais ────────────────────────────────────────────────────────────────
+
   /**
-   * POST /api/posts/{id}/save/ → { success: true, hasSaved: true }
+   * POST /api/locals/{id}/save/
+   * Guarda o local nos favoritos do utilizador autenticado.
+   * Resposta: LocalSaveResponse { success: boolean, hasSaved: true }
+   */
+  saveLocal: (id: string) =>
+    apiFetch<SaveResponse>(`/api/locals/${id}/save/`, { method: 'POST' }),
+
+  /**
+   * DELETE /api/locals/{id}/save/
+   * Remove o local dos favoritos do utilizador autenticado.
+   * Resposta: LocalRemoveSaveResponse { success: boolean, hasSaved: false }
+   */
+  unsaveLocal: (id: string) =>
+    apiFetch<SaveResponse>(`/api/locals/${id}/save/`, { method: 'DELETE' }),
+
+  // ── Posts ─────────────────────────────────────────────────────────────────
+
+  /**
+   * POST /api/posts/{id}/save/
+   * Resposta: PostSaveResponse { success: boolean, hasSaved: true }
    */
   savePost: (id: string) =>
     apiFetch<SaveResponse>(`/api/posts/${id}/save/`, { method: 'POST' }),
 
   /**
-   * DELETE /api/posts/{id}/save/ → { success: true, hasSaved: false }
+   * DELETE /api/posts/{id}/save/
+   * Resposta: PostSaveResponse { success: boolean, hasSaved: false }
    */
   unsavePost: (id: string) =>
     apiFetch<SaveResponse>(`/api/posts/${id}/save/`, { method: 'DELETE' }),
 
-  /**
-   * POST /api/locals/{id}/save/ → { message, saved: true }
-   * Backend faz toggle: guarda se não existia, remove se existia.
-   */
-  saveLocal: (id: string) =>
-    apiFetch<any>(`/api/locals/${id}/save/`, { method: 'POST' }),
+  // ── Serviços ──────────────────────────────────────────────────────────────
 
   /**
-   * POST /api/locals/{id}/save/ (mesmo endpoint — toggle remove)
+   * POST /api/services/{id}/save/
+   * Resposta: ServiceSaveResponse { success: boolean, hasSaved: true }
    */
-  unsaveLocal: (id: string) =>
-    apiFetch<any>(`/api/locals/${id}/save/`, { method: 'POST' }),
+  saveService: (id: string) =>
+    apiFetch<SaveResponse>(`/api/services/${id}/save/`, { method: 'POST' }),
+
+  /**
+   * DELETE /api/services/{id}/save/
+   * Resposta: ServiceRemoveSaveResponse { success: boolean, hasSaved: false }
+   */
+  unsaveService: (id: string) =>
+    apiFetch<SaveResponse>(`/api/services/${id}/save/`, { method: 'DELETE' }),
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1132,6 +1193,167 @@ export const favoritesApi = {
 export const mediaApi = {
   uploadPlaceImage:   (_id: string, file: File) => uploadApi.images([file], 'local'),
   uploadServiceImage: (_id: string, file: File) => uploadApi.images([file], 'service'),
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// AI  (OpenAPI tag: 🤖 Inteligência Artificial)
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Erro especial devolvido quando a Gemini API retorna HTTP 429.
+ * Sinaliza ao Chatbot que o limite foi atingido, não um erro do utilizador.
+ */
+export const AI_RATE_LIMIT_ERROR = 'AI_RATE_LIMIT_EXCEEDED';
+
+export const aiApi = {
+  /**
+   * POST /api/ai/chat/
+   * Chatbot turístico local — responde perguntas sobre turismo em Inhambane
+   * usando dados da plataforma.
+   *
+   * Body:   { message: string }  (máximo 500 caracteres)
+   * Auth:   Bearer token (opcional — aceita anónimo conforme schema)
+   * 200:    { message: string, response: string, method: string }
+   *
+   * Tratamento de HTTP 429 (Gemini rate limit):
+   *   1. Lê retry_delay da resposta (segundos). Valor por omissão: 5s.
+   *   2. Aguarda esse tempo uma única vez (sem loop).
+   *   3. Tenta novamente uma só vez.
+   *   4. Se voltar 429, devolve { error: AI_RATE_LIMIT_ERROR } para o Chatbot
+   *      apresentar a mensagem ao utilizador.
+   *   Nunca cria pedidos paralelos nem ciclos infinitos.
+   *
+   * NOTA: endpoint correcto é /api/ai/chat/ (NÃO /api/ai/chatbot/)
+   */
+  chat: async (
+    message: string,
+  ): Promise<ApiResponse<{ message: string; response: string; method: string }>> => {
+    const endpoint = '/api/ai/chat/';
+    const body     = JSON.stringify({ message });
+    const opts: RequestInit = { method: 'POST', body };
+
+    // ── Primeira tentativa ─────────────────────────────────────────────────
+    const url  = `${getBaseUrl()}${endpoint}`;
+    const hdrs: Record<string, string> = {
+      'Content-Type': 'application/json',
+      Accept: 'application/json',
+    };
+    const t = getToken();
+    if (t) hdrs['Authorization'] = `Bearer ${t}`;
+
+    let res: Response;
+    try {
+      res = await fetch(url, { ...opts, headers: hdrs });
+    } catch (e) {
+      return { error: e instanceof Error ? e.message : 'Erro de rede' };
+    }
+
+    // ── Tratar 429 — rate limit da Gemini ──────────────────────────────────
+    // O backend Django devolve o erro do Gemini como texto, por exemplo:
+    //   { "error": "429 You exceeded your quota ... retry_delay { seconds: 15 } ..." }
+    // ou como string plana. Precisamos extrair o número de segundos de qualquer forma.
+    if (res.status === 429) {
+      let retryDelay = 15; // segundos — valor por omissão conservador (Gemini free tier)
+
+      try {
+        // Tentar ler como texto primeiro (cobre JSON e resposta plana)
+        const rawText = await res.text();
+
+        // 1. Tentar parse JSON e procurar campo numérico
+        try {
+          const errBody = JSON.parse(rawText);
+          const envelope = errBody?.data ?? errBody;
+
+          // Campo numérico directo: { retry_delay: 15 } ou { retry_after: 15 }
+          const numericField =
+            envelope?.retry_delay ?? envelope?.retry_after ?? envelope?.retryDelay;
+          if (typeof numericField === 'number' && numericField > 0 && numericField <= 120) {
+            retryDelay = numericField;
+          } else {
+            // 2. O delay pode estar numa string de mensagem do tipo:
+            //    "... retry_delay { seconds: 15 } ..." ou "Please retry in 15.6s"
+            const msgStr: string =
+              envelope?.error ?? envelope?.detail ?? envelope?.message ?? rawText;
+            const fromProto = /retry_delay\s*\{\s*seconds:\s*([\d.]+)/i.exec(msgStr);
+            const fromRetry = /retry\s+in\s+([\d.]+)\s*s/i.exec(msgStr);
+            const seconds   = fromProto?.[1] ?? fromRetry?.[1];
+            if (seconds) {
+              const parsed = parseFloat(seconds);
+              if (!isNaN(parsed) && parsed > 0 && parsed <= 120) {
+                retryDelay = Math.ceil(parsed); // arredondar para cima
+              }
+            }
+          }
+        } catch {
+          // Não é JSON — tentar regex directamente no texto
+          const fromProto = /retry_delay\s*\{\s*seconds:\s*([\d.]+)/i.exec(rawText);
+          const fromRetry = /retry\s+in\s+([\d.]+)\s*s/i.exec(rawText);
+          const seconds   = fromProto?.[1] ?? fromRetry?.[1];
+          if (seconds) {
+            const parsed = parseFloat(seconds);
+            if (!isNaN(parsed) && parsed > 0 && parsed <= 120) {
+              retryDelay = Math.ceil(parsed);
+            }
+          }
+        }
+      } catch { /* usa o valor por omissão */ }
+
+      console.info(`[aiApi] HTTP 429 — aguardar ${retryDelay}s antes de tentar novamente.`);
+
+      // Aguardar o tempo indicado — uma única vez, sem loop
+      await new Promise<void>(resolve => setTimeout(resolve, retryDelay * 1000));
+
+      // ── Segunda (e última) tentativa ─────────────────────────────────────
+      let res2: Response;
+      try {
+        const t2 = getToken();
+        const hdrs2 = { ...hdrs };
+        if (t2) hdrs2['Authorization'] = `Bearer ${t2}`;
+        res2 = await fetch(url, { ...opts, headers: hdrs2 });
+      } catch (e) {
+        return { error: e instanceof Error ? e.message : 'Erro de rede' };
+      }
+
+      if (res2.status === 429) {
+        // Limite ainda excedido após espera — informar o utilizador, sem nova tentativa
+        return { error: AI_RATE_LIMIT_ERROR };
+      }
+
+      // Continuar o processamento normal com res2
+      res = res2;
+    }
+
+    // ── Processar resposta com erro (não-429) ──────────────────────────────
+    if (!res.ok) {
+      // Extrair mensagem sem fazer um segundo pedido HTTP (evita duplicar chamadas)
+      let errMsg = `Erro ${res.status}`;
+      try {
+        const errText = await res.text();
+        try {
+          const errBody = JSON.parse(errText);
+          const envelope = errBody?.data ?? errBody;
+          errMsg =
+            (typeof envelope?.error   === 'string' ? envelope.error   : null) ??
+            (typeof envelope?.detail  === 'string' ? envelope.detail  : null) ??
+            (typeof envelope?.message === 'string' ? envelope.message : null) ??
+            errMsg;
+        } catch {
+          if (errText) errMsg = errText.slice(0, 200);
+        }
+      } catch { /* mantém errMsg genérico */ }
+      return { error: errMsg };
+    }
+
+    try {
+      const raw = await res.json();
+      const payload = (raw && typeof raw === 'object' && 'data' in raw && raw.data !== undefined)
+        ? raw.data
+        : raw;
+      return { data: payload };
+    } catch {
+      return { error: 'Resposta inválida do servidor.' };
+    }
+  },
 };
 
 export const chatApi = {

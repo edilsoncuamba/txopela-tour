@@ -2,12 +2,15 @@ import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { ChevronLeft, Search, X, MoreVertical, Edit2, Trash2 } from 'lucide-react';
 import { IconStar, IconHeart, IconMapPin } from '@/components/icons';
+import { Heart } from 'lucide-react';
 import PostDetail from '@/pages/PostDetail';
 import { postsApi } from '@/services/api';
 import { useAuth } from '@/context/AuthContext';
+import { useFavorites } from '@/context/FavoritesContext';
 import { mapValidPost, filterValidPublications, extractImages, PLACEHOLDER_IMAGE } from '@/utils/dataValidation';
 import { translatePostCategory, postCategoryColor } from '@/utils/translations';
 import { useScrollTop } from '@/hooks/useScrollTop';
+import { useTheme } from '@/context/ThemeContext';
 
 interface AllPostsProps {
   onBack: () => void;
@@ -52,6 +55,21 @@ export default function AllPosts({
   onBack, onAuthorPress, onEditPost }: AllPostsProps) {
   useScrollTop();
   const { user } = useAuth();
+  const { isFavorite, toggleFavorite } = useFavorites();
+  const { isDark } = useTheme();
+  const dm = {
+    bg:      isDark ? '#0F1117' : '#F5F5F0',
+    surface: isDark ? '#1A1D27' : '#ffffff',
+    border:  isDark ? 'rgba(255,255,255,0.07)' : '#F3F4F6',
+    text:    isDark ? '#F0F4FF' : '#1A1A1A',
+    text2:   isDark ? '#6B7A99' : '#9CA3AF',
+    input:   isDark ? '#22263A' : '#F8FAFC',
+    inputBorder: isDark ? 'rgba(255,255,255,0.1)' : '#E2E8F0',
+    pill:    isDark ? '#22263A' : '#ffffff',
+    pillBorder: isDark ? 'rgba(255,255,255,0.08)' : '#E5E7EB',
+    skel:    isDark ? '#22263A' : '#E5E7EB',
+    btnBorder: isDark ? 'rgba(255,255,255,0.1)' : '#E5E7EB',
+  };
   const [posts, setPosts]         = useState<ApiPost[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError]         = useState<string | null>(null);
@@ -183,7 +201,7 @@ export default function AllPosts({
     return {
       id:          p.id,
       name:        p.name || p.title || 'Post',
-      category:    p.category || 'other',
+      category:    translatePostCategory(p.category) || 'Publicação',
       lat:         p.lat ?? loc.latitude  ?? 0,
       lng:         p.lng ?? loc.longitude ?? 0,
       endereco:    p.endereco || loc.address || '',
@@ -276,58 +294,45 @@ export default function AllPosts({
   return (
     <motion.div
       className="min-h-screen pb-24"
-      style={{ background: '#F5F5F0', fontFamily: 'Nunito, sans-serif' }}
+      style={{ background: dm.bg, fontFamily: 'Nunito, sans-serif' }}
       initial={{ opacity: 0, y: 10 }}
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: 6 }}
       transition={{ duration: 0.2, ease: 'easeOut' }}
     >
       {/* -- HEADER -------------------------------------------------------- */}
-      <div className="sticky top-0 z-30 bg-white border-b border-gray-100 px-4 pt-5 pb-3">
+      <div className="sticky top-0 z-30 px-4 pt-5 pb-3"
+        style={{ background: dm.surface, borderBottom: `1px solid ${dm.border}` }}>
         <div className="flex items-center gap-3 mb-3">
-          <button
-            onClick={onBack}
-            className="w-9 h-9 bg-gray-100 rounded-full flex items-center justify-center flex-shrink-0"
-          >
-            <ChevronLeft size={20} style={{ color: '#1A1A1A' }} />
+          <button onClick={onBack}
+            className="w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0"
+            style={{ background: isDark ? '#22263A' : '#F3F4F6' }}>
+            <ChevronLeft size={20} style={{ color: dm.text }} />
           </button>
-          <h1 className="text-lg font-black" style={{ color: '#1A1A1A' }}>Publica��es</h1>
+          <h1 className="text-lg font-black" style={{ color: dm.text }}>Publicações</h1>
         </div>
 
         {/* Search */}
-        <div
-          className="flex items-center gap-2 px-3 py-2.5 rounded-xl border mb-3"
-          style={{ background: '#F8FAFC', borderColor: '#E2E8F0' }}
-        >
-          <Search size={15} className="text-gray-400 flex-shrink-0" />
-          <input
-            type="text"
-            placeholder="Pesquisar publica��es..."
-            value={search}
-            onChange={e => setSearch(e.target.value)}
+        <div className="flex items-center gap-2 px-3 py-2.5 rounded-xl border mb-3"
+          style={{ background: dm.input, borderColor: dm.inputBorder }}>
+          <Search size={15} style={{ color: dm.text2, flexShrink: 0 }} />
+          <input type="text" placeholder="Pesquisar publicações..."
+            value={search} onChange={e => setSearch(e.target.value)}
             className="flex-1 text-sm bg-transparent focus:outline-none"
-            style={{ color: '#1A1A1A' }}
-          />
-          {search && (
-            <button onClick={() => setSearch('')}>
-              <X size={14} className="text-gray-400" />
-            </button>
-          )}
+            style={{ color: dm.text }} />
+          {search && <button onClick={() => setSearch('')}><X size={14} style={{ color: dm.text2 }} /></button>}
         </div>
 
-        {/* Filtro por prov�ncia */}
+        {/* Filtro por província */}
         <div className="flex gap-2 overflow-x-auto scrollbar-hide pb-1">
           {provincias.map(p => (
-            <button
-              key={p}
-              onClick={() => setFilter(p)}
+            <button key={p} onClick={() => setFilter(p)}
               className="flex-shrink-0 px-3 py-1.5 rounded-full text-xs font-bold transition-all"
               style={{
-                background: filter === p ? '#1B5E3B' : 'white',
-                color: filter === p ? 'white' : '#6B7280',
-                border: `1px solid ${filter === p ? '#1B5E3B' : '#E5E7EB'}`,
-              }}
-            >
+                background: filter === p ? '#1B5E3B' : dm.pill,
+                color: filter === p ? 'white' : dm.text2,
+                border: `1px solid ${filter === p ? '#1B5E3B' : dm.pillBorder}`,
+              }}>
               {p}
             </button>
           ))}
@@ -337,14 +342,14 @@ export default function AllPosts({
       {/* -- CONTE�DO ------------------------------------------------------- */}
       <div className="px-4 pt-4 max-w-5xl mx-auto">
         {isLoading && posts.length === 0 ? (
-          /* Skeleton loading */
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {[1, 2, 3, 4].map(i => (
-              <div key={i} className="bg-white rounded-2xl overflow-hidden shadow-sm animate-pulse">
-                <div className="h-48 bg-gray-200" />
+              <div key={i} className="rounded-2xl overflow-hidden shadow-sm animate-pulse"
+                style={{ background: dm.surface }}>
+                <div className="h-48" style={{ background: dm.skel }} />
                 <div className="p-3 space-y-2">
-                  <div className="h-3 bg-gray-200 rounded w-3/4" />
-                  <div className="h-3 bg-gray-200 rounded w-1/2" />
+                  <div className="h-3 rounded w-3/4" style={{ background: dm.skel }} />
+                  <div className="h-3 rounded w-1/2" style={{ background: dm.skel }} />
                 </div>
               </div>
             ))}
@@ -388,7 +393,8 @@ export default function AllPosts({
                     initial={{ opacity: 0, y: 12 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ delay: i * 0.04 }}
-                    className="bg-white rounded-2xl overflow-hidden shadow-sm hover:shadow-md transition-shadow cursor-pointer group"
+                    className="rounded-2xl overflow-hidden shadow-sm hover:shadow-md transition-shadow cursor-pointer group"
+                    style={{ background: dm.surface }}
                   >
                     {/* Imagem */}
                     <div className="relative overflow-hidden" style={{ height: 200 }}>
@@ -417,8 +423,8 @@ export default function AllPosts({
                             <motion.div
                               initial={{ opacity: 0, scale: 0.9, y: -4 }}
                               animate={{ opacity: 1, scale: 1, y: 0 }}
-                              className="absolute top-10 left-0 bg-white rounded-xl shadow-lg border border-gray-100 overflow-hidden z-10"
-                              style={{ minWidth: 150 }}
+                              className="absolute top-10 left-0 rounded-xl shadow-lg overflow-hidden z-10"
+                              style={{ minWidth: 150, background: dm.surface, border: `1px solid ${dm.border}` }}
                             >
                               <button
                                 onClick={(e) => {
@@ -426,10 +432,10 @@ export default function AllPosts({
                                   setShowOptionsMenu(null);
                                   onEditPost?.(post.id);
                                 }}
-                                className="w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-gray-50 transition-colors text-left"
-                              >
-                                <Edit2 size={14} className="text-blue-600" />
-                                <span className="text-gray-700">Editar</span>
+                                className="w-full flex items-center gap-2 px-3 py-2 text-sm transition-colors text-left"
+                                style={{ color: isDark ? '#93C5FD' : '#2563EB' }}>
+                                <Edit2 size={14} style={{ color: isDark ? '#93C5FD' : '#2563EB' }} />
+                                <span style={{ color: dm.text }}>Editar</span>
                               </button>
                               <button
                                 onClick={(e) => {
@@ -449,8 +455,20 @@ export default function AllPosts({
                         </div>
                       )}
 
+                      {/* Indicador de múltiplas imagens — mesmo estilo dos dots do ImageCarousel */}
+                      {raw.images && raw.images.length > 1 && (
+                        <div className="absolute top-3 right-3 flex items-center gap-0.5 px-2 py-0.5 rounded-full"
+                          style={{ background: 'rgba(0,0,0,0.55)', backdropFilter: 'blur(6px)' }}>
+                          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                            <rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/>
+                          </svg>
+                          <span className="text-[10px] font-black text-white leading-none">{raw.images.length}</span>
+                        </div>
+                      )}
+
                       {/* Rating */}
-                      <div className="absolute top-3 right-3 flex items-center gap-1 bg-white/90 backdrop-blur-sm rounded-full px-2 py-0.5 shadow">
+                      <div className="absolute top-3 flex items-center gap-1 bg-white/90 backdrop-blur-sm rounded-full px-2 py-0.5 shadow"
+                        style={{ right: raw.images && raw.images.length > 1 ? '2.75rem' : '0.75rem' }}>
                         <IconStar size={11} fill="#FBBF24" stroke="none" />
                         <span className="text-xs font-black" style={{ color: '#1A1A1A' }}>{post.rating}</span>
                       </div>
@@ -490,42 +508,56 @@ export default function AllPosts({
                     </div>
 
                     {/* Actions */}
-                    <div className="px-3 py-2 flex items-center justify-between">
+                    <div className="px-3 py-2 flex items-center justify-between"
+                      style={{ borderTop: `1px solid ${dm.border}` }}>
                       <div className="flex items-center gap-3">
-                        <button
-                          onClick={() => handleLike(post.id)}
-                          className="flex items-center gap-1"
-                        >
-                          <IconHeart
-                            size={15}
-                            fill={liked[post.id] ? '#EF4444' : 'none'}
-                            color={liked[post.id] ? '#EF4444' : '#9CA3AF'}
-                            strokeWidth={1.8}
-                          />
-                          <span className="text-xs" style={{ color: '#9CA3AF' }}>
+                        <button onClick={() => handleLike(post.id)} className="flex items-center gap-1">
+                          <IconHeart size={15} fill={liked[post.id] ? '#EF4444' : 'none'}
+                            color={liked[post.id] ? '#EF4444' : dm.text2} strokeWidth={1.8} />
+                          <span className="text-xs" style={{ color: dm.text2 }}>
                             {(post.likes_count ?? 0) + (liked[post.id] && !raw.userInteraction?.hasLiked ? 1 : 0)}
                           </span>
                         </button>
+                        {/* Botão guardar nos favoritos */}
                         <button
-                          onClick={() => setSuggested(p => ({ ...p, [post.id]: !p[post.id] }))}
+                          onClick={e => {
+                            e.stopPropagation();
+                            toggleFavorite({
+                              id:    post.id,
+                              type:  'post',
+                              name:  post.description?.slice(0, 60) ?? post.name ?? 'Publicação',
+                              image: post.image ?? PLACEHOLDER_IMAGE,
+                              tag:   post.badge,
+                              provincia: post.province ?? post.provincia ?? '',
+                              categoryKey: 'post',
+                              raw,
+                            });
+                          }}
                           className="flex items-center gap-1"
+                          title={isFavorite(post.id) ? 'Remover dos favoritos' : 'Guardar nos favoritos'}
                         >
+                          <Heart
+                            size={15}
+                            fill={isFavorite(post.id) ? '#0077B6' : 'none'}
+                            color={isFavorite(post.id) ? '#0077B6' : dm.text2}
+                            strokeWidth={1.8}
+                          />
+                        </button>
+                        <button onClick={() => setSuggested(p => ({ ...p, [post.id]: !p[post.id] }))}
+                          className="flex items-center gap-1">
                           <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
-                            stroke={suggested[post.id] ? '#1B5E3B' : '#9CA3AF'} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                            stroke={suggested[post.id] ? '#1B5E3B' : dm.text2} strokeWidth="2.2"
+                            strokeLinecap="round" strokeLinejoin="round">
                             <path d="M22 2L11 13" /><path d="M22 2L15 22 11 13 2 9l20-7z" />
                           </svg>
-                          <span className="text-xs" style={{ color: suggested[post.id] ? '#1B5E3B' : '#9CA3AF' }}>
+                          <span className="text-xs" style={{ color: suggested[post.id] ? '#1B5E3B' : dm.text2 }}>
                             {suggested[post.id] ? 'Sugerido' : 'Sugerir'}
                           </span>
                         </button>
                       </div>
-
-                      <motion.button
-                        whileTap={{ scale: 0.95 }}
-                        onClick={() => setSelectedPost(raw)}
+                      <motion.button whileTap={{ scale: 0.95 }} onClick={() => setSelectedPost(raw)}
                         className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-black border"
-                        style={{ borderColor: '#E5E7EB', color: '#1A1A1A' }}
-                      >
+                        style={{ borderColor: dm.btnBorder, color: dm.text }}>
                         <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
                           <circle cx="12" cy="12" r="3" /><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7z" />
                         </svg>

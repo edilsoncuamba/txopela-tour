@@ -1,8 +1,10 @@
-import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import React, { createContext, useContext, useRef, useState, useEffect, useCallback } from 'react';
 import { localsApi, notificationsApi } from '@/services/api';
 import { wsService } from '@/services/websocket';
+import { tokenStore } from '@/services/tokenStore';
 import { extractImages } from '@/utils/dataValidation';
 import type { Local, Notification } from '@/types';
+import { MapContext } from '@/context/MapContext';
 
 interface AppContextType {
   locais: Local[];
@@ -37,6 +39,19 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [unreadCount, setUnreadCount] = useState(0);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // ── Guard defensivo — funciona mesmo que AppProvider seja usado sem MapProvider
+  // (testes, ambientes isolados). Usa useContext directamente em vez do hook que lança.
+  const mapCtx = useContext(MapContext);
+  const notifyMapReloadFn = mapCtx?.notifyMapReload ?? (() => {});
+
+  // Ref estável de notifyMapReload — o useEffect do WebSocket usa a ref,
+  // por isso não precisa de notifyMapReload nas suas deps (corre só uma vez,
+  // mas a callback que chama sempre a versão mais recente).
+  const notifyMapReloadRef = useRef(notifyMapReloadFn);
+  useEffect(() => {
+    notifyMapReloadRef.current = notifyMapReloadFn;
+  }, [notifyMapReloadFn]);
 
   // Fetch locations — seguindo documentação 3.1
   const fetchLocais = useCallback(async (params?: { category?: string; search?: string }) => {
@@ -232,11 +247,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
-  // Initial fetch
+  // Initial fetch — só se houver token em memória
   useEffect(() => {
-    const token = localStorage.getItem('txopela_token');
-    if (token) {
-      // Add a small delay to ensure token is properly set
+    if (tokenStore.getAccess()) {
       const timer = setTimeout(() => {
         fetchLocais();
         fetchCategories();
@@ -249,15 +262,15 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   // Connect to WebSocket for real-time updates
   useEffect(() => {
-    const token = localStorage.getItem('txopela_token');
-    if (!token) return;
+    if (!tokenStore.getAccess()) return;
 
     // Verifica se o token actual é o access token real (não legacy)
     const checkBackendAndConnect = async () => {
       try {
         const baseUrl = (import.meta.env.VITE_API_URL as string || 'http://192.168.88.127:8000/api').replace(/\/api$/, '');
+        const tk = tokenStore.getAccess();
         const response = await fetch(`${baseUrl}/api/notifications/count/`, {
-          headers: { 'Authorization': `Bearer ${token}` },
+          headers: { 'Authorization': `Bearer ${tk}` },
         });
         
         if (!response.ok) return; // Backend not ready
@@ -278,12 +291,16 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           },
           onPostCreated: (post: any) => {
             console.log('📝 New post created:', post);
+            // Notificar o mapa para recarregar os pins em tempo real (via ref estável)
+            notifyMapReloadRef.current();
           },
           onPostUpdated: (post: any) => {
             console.log('📝 Post updated:', post);
+            notifyMapReloadRef.current();
           },
           onPostDeleted: (postId: string) => {
             console.log('📝 Post deleted:', postId);
+            notifyMapReloadRef.current();
           },
           onReviewCreated: (review: any) => {
             console.log('⭐ New review created:', review);

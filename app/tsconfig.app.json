@@ -38,6 +38,7 @@
     "src/test-foundation.ts",
     "src/test-backend-connection.ts",
     "src/components/shared/InteractiveMap.test.tsx",
-    "src/components/shared/SearchBar.test.tsx"
+    "src/components/shared/SearchBar.test.tsx",
+    "src/components/shared/SearchBar.test.simple.tsx"
   ]
 }

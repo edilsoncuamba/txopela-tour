@@ -158,8 +158,7 @@ export interface LocalWriteRequest {
 
 export interface LocalReviewWriteRequest {
   rating: number;           // 1-5, required
-  comment: string;          // required
-  images?: string[];        // opcional
+  comment: string;          // required (minLength: 1)
 }
 
 export interface ReviewUpdateRequest {
@@ -235,8 +234,7 @@ export interface ServiceReview {
 
 export interface ServiceReviewWriteRequest {
   rating: number;           // 1-5, required
-  comment: string;          // required
-  images?: string[];        // opcional
+  comment: string;          // required (minLength: 1)
 }
 
 /** ServiceWriteRequest — campos PLANOS */

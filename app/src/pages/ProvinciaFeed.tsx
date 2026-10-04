@@ -1,9 +1,32 @@
 import { useState, useEffect } from 'react';
 import { PLACEHOLDER_IMAGE, assignLocalBadge, extractImages, mapValidLocal } from '@/utils/dataValidation';
-import { translateLocalCategory } from '@/utils/translations';
+import { translateLocalCategory, itemMatchesFilter } from '@/utils/translations';
 import { motion } from 'framer-motion';
 import { ChevronLeft } from 'lucide-react';
 import { IconStar, IconHeart } from '@/components/icons';
+import { useTheme } from '@/context/ThemeContext';
+
+// ─── Filtros (mesmo padrão de AllDiscoveries) ─────────────────────────────────
+
+const FILTER_CATEGORIES = ['Praias', 'Cultura & História', 'Natureza', 'Aventura', 'Gastronomia', 'Mergulho', 'Ecoturismo'];
+
+const FILTER_COLOR: Record<string, string> = {
+  'Praias':             '#2BB5C8',
+  'Cultura & História': '#7B5EA7',
+  'Natureza':           '#22C55E',
+  'Aventura':           '#F4821F',
+  'Gastronomia':        '#E05A3A',
+  'Mergulho':           '#0EA5E9',
+  'Ecoturismo':         '#1B5E3B',
+  'Outro':              '#6B7280',
+};
+
+function resolveFilterLabel(item: any): string {
+  for (const cat of FILTER_CATEGORIES) {
+    if (itemMatchesFilter(item, cat)) return cat;
+  }
+  return 'Outro';
+}
 import DestinationDetail from '@/pages/DestinationDetail';
 import { localsApi } from '@/services/api';
 import { useScrollTop } from '@/hooks/useScrollTop';
@@ -48,6 +71,16 @@ interface LocalItem {
 }export default function ProvinciaFeed({
   provincia, onBack }: ProvinciaFeedProps) {
   useScrollTop();
+  const { isDark } = useTheme();
+  const dm = {
+    bg:      isDark ? '#0F1117' : '#F5F5F0',
+    surface: isDark ? '#1A1D27' : '#ffffff',
+    border:  isDark ? 'rgba(255,255,255,0.07)' : '#F3F4F6',
+    text:    isDark ? '#F0F4FF' : '#1A1A1A',
+    text2:   isDark ? '#6B7A99' : '#9CA3AF',
+    back:    isDark ? '#22263A' : '#F3F4F6',
+    skel:    isDark ? '#22263A' : '#E5E7EB',
+  };
   const [locais, setLocais] = useState<LocalItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [selectedLocal, setSelectedLocal] = useState<LocalItem | null>(null);
@@ -90,27 +123,25 @@ interface LocalItem {
   return (
     <motion.div
       className="min-h-screen pb-24"
-      style={{ background: '#F5F5F0', fontFamily: 'Nunito, sans-serif' }}
+      style={{ background: dm.bg, fontFamily: 'Nunito, sans-serif' }}
       initial={{ opacity: 0, y: 10 }}
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: 6 }}
       transition={{ duration: 0.2, ease: 'easeOut' }}
     >
       {/* Header */}
-      <div className="bg-white px-4 pt-5 pb-4 sticky top-0 z-10 shadow-sm">
+      <div className="px-4 pt-5 pb-4 sticky top-0 z-10 shadow-sm"
+        style={{ background: dm.surface, borderBottom: `1px solid ${dm.border}` }}>
         <div className="flex items-center gap-3">
           <button
             onClick={onBack}
             className="w-9 h-9 rounded-full flex items-center justify-center"
-            style={{ background: '#F3F4F6' }}
+            style={{ background: dm.back }}
           >
-            <ChevronLeft size={20} strokeWidth={2.5} />
+            <ChevronLeft size={20} strokeWidth={2.5} style={{ color: dm.text }} />
           </button>
           <div className="text-left">
-            <h1 className="text-xl font-black text-left" style={{ color: '#1A1A1A' }}>{provincia}</h1>
-            <p className="text-xs text-left" style={{ color: '#9CA3AF' }}>
-              {isLoading ? 'A carregar...' : `${locais.length} destinos encontrados`}
-            </p>
+            <h1 className="text-xl font-black text-left" style={{ color: dm.text }}>{provincia}</h1>
           </div>
         </div>
       </div>
@@ -119,11 +150,12 @@ interface LocalItem {
       {isLoading ? (
         <div className="grid grid-cols-2 gap-3 px-4 pt-4">
           {[1,2,3,4].map(i => (
-            <div key={i} className="bg-white rounded-3xl overflow-hidden shadow-sm animate-pulse">
-              <div className="h-48 bg-gray-200" />
+            <div key={i} className="rounded-3xl overflow-hidden shadow-sm animate-pulse"
+              style={{ background: dm.surface }}>
+              <div className="h-48" style={{ background: dm.skel }} />
               <div className="p-2.5 space-y-2">
-                <div className="h-3 bg-gray-200 rounded w-3/4" />
-                <div className="h-3 bg-gray-200 rounded w-1/2" />
+                <div className="h-3 rounded w-3/4" style={{ background: dm.skel }} />
+                <div className="h-3 rounded w-1/2" style={{ background: dm.skel }} />
               </div>
             </div>
           ))}
@@ -145,7 +177,8 @@ interface LocalItem {
               key={local.id}
               whileTap={{ scale: 0.98 }}
               onClick={() => setSelectedLocal(local)}
-              className="bg-white rounded-3xl overflow-hidden shadow-sm cursor-pointer"
+              className="rounded-3xl overflow-hidden shadow-sm cursor-pointer"
+              style={{ background: dm.surface }}
             >
               {/* Image */}
               <div className="relative" style={{ height: 200 }}>
@@ -176,19 +209,23 @@ interface LocalItem {
               </div>
 
               {/* Content */}
-              <div className="p-2.5">
+              <div className="p-2.5 text-left">
                 <div className="flex items-start justify-between mb-1">
-                  <div className="flex-1">
-                    <h3 className="text-sm font-black mb-0.5 leading-tight" style={{ color: '#1A1A1A' }}>{local.name}</h3>
-                    <p className="text-[10px] leading-snug line-clamp-2" style={{ color: '#6B7280' }}>{local.desc}</p>
-                  </div>
-                  <span className="ml-2 text-[9px] font-bold px-2 py-0.5 rounded-full flex-shrink-0"
-                    style={{ background: '#EEF7F0', color: '#1B5E3B' }}>
-                    {local.category}
-                  </span>
+                  <h3 className="text-sm font-black leading-tight flex-1" style={{ color: dm.text }}>{local.name}</h3>
+                  {(() => {
+                    const label = resolveFilterLabel(local);
+                    const color = FILTER_COLOR[label] || '#6B7280';
+                    return (
+                      <span className="ml-2 text-[9px] font-bold px-2 py-0.5 rounded-full flex-shrink-0"
+                        style={{ background: color + '18', color }}>
+                        {label}
+                      </span>
+                    );
+                  })()}
                 </div>
 
-                <div className="flex items-center justify-between pt-1">
+                <div className="flex items-center justify-between pt-1 border-t"
+                  style={{ borderColor: dm.border }}>
                   <div className="flex items-center gap-2">
                     <button
                       onClick={e => { e.stopPropagation(); setLiked(p => ({ ...p, [local.id]: !p[local.id] })); }}

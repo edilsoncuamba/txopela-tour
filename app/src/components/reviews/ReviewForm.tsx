@@ -69,30 +69,35 @@ export default function ReviewForm({
           ))}
         </div>
 
-        {/* Comment */}
+        {/* Comment — obrigatório segundo o schema (minLength: 1) */}
         <textarea
           value={comment}
           onChange={(e) => onCommentChange(e.target.value)}
-          placeholder="Deixa um comentário (opcional)..."
+          placeholder="Escreve o teu comentário..."
           rows={2}
           maxLength={500}
           className="w-full px-3 py-2 rounded-xl border text-sm leading-snug resize-none focus:outline-none focus:border-[#1B5E3B] transition-colors"
           style={{
-            borderColor: '#E5E7EB',
+            borderColor: comment.trim().length === 0 ? '#FCA5A5' : '#E5E7EB',
             color: '#1A1A1A',
             background: '#FAFAFA',
           }}
         />
+        {comment.trim().length === 0 && (
+          <p className="text-xs" style={{ color: '#EF4444' }}>
+            O comentário é obrigatório.
+          </p>
+        )}
 
         {/* Submit Button */}
         <motion.button
           whileHover={{ scale: 1.02 }}
           whileTap={{ scale: 0.98 }}
           onClick={onSubmit}
-          disabled={isSubmitting}
+          disabled={isSubmitting || comment.trim().length === 0}
           className="w-full py-2.5 rounded-xl text-sm font-bold text-white"
           style={{
-            background: isSubmitting ? '#9CA3AF' : '#1B5E3B',
+            background: isSubmitting || comment.trim().length === 0 ? '#9CA3AF' : '#1B5E3B',
           }}
         >
           {isSubmitting

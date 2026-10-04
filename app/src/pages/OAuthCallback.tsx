@@ -2,6 +2,7 @@
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '@/context/AuthContext';
 import { googleOAuth, githubOAuth } from '@/services/oauth';
+import { tokenStore } from '@/services/tokenStore';
 import { useScrollTop } from '@/hooks/useScrollTop';
 
 export default function OAuthCallback() {
@@ -24,9 +25,10 @@ export default function OAuthCallback() {
         const oauthService = provider === 'google' ? googleOAuth : githubOAuth;
         const data = await oauthService.handleCallback(code);
         
-        // Save tokens
-        localStorage.setItem('txopela_token', data.access);
-        localStorage.setItem('txopela_refresh_token', data.refresh);
+        // Guardar tokens em memória (sem localStorage)
+        if (data.access && data.refresh) {
+          tokenStore.set({ token: data.access, refreshToken: data.refresh });
+        }
         
         // Refresh user to update auth context
         await refreshUser();

@@ -17,33 +17,55 @@ type ViewState =
 export default function CultureModule({ onBack, onAuthorPress }: CultureModuleProps) {
   const [currentView, setCurrentView] = useState<ViewState>({ type: 'home' });
 
+  // Garante scroll ao topo em qualquer troca de view —
+  // cobre tanto window como o contentor overflow-y-auto do App
+  const scrollTop = () => {
+    window.scrollTo({ top: 0, left: 0, behavior: 'instant' as ScrollBehavior });
+    // Percorre os elementos pai até encontrar o contentor com scroll
+    let el: HTMLElement | null = document.activeElement as HTMLElement | null;
+    while (el) {
+      if (el.scrollTop > 0) { el.scrollTop = 0; }
+      el = el.parentElement;
+    }
+    // Fallback: scroll de todos os elementos com overflow que possam estar no topo
+    document.querySelectorAll<HTMLElement>('[class*="overflow-y"]').forEach(el => {
+      el.scrollTop = 0;
+    });
+  };
+
   return (
     <>
       {currentView.type === 'home' && (
         <CultureHome
           onBack={onBack}
-          onProvinceSelect={province =>
-            setCurrentView({ type: 'list', province })
-          }
+          onProvinceSelect={province => {
+            scrollTop();
+            setCurrentView({ type: 'list', province });
+          }}
         />
       )}
 
       {currentView.type === 'list' && (
         <HeritageList
           province={currentView.province}
-          onBack={() => setCurrentView({ type: 'home' })}
-          onHeritageSelect={heritage =>
-            setCurrentView({ type: 'detail', heritage, province: currentView.province })
-          }
+          onBack={() => {
+            scrollTop();
+            setCurrentView({ type: 'home' });
+          }}
+          onHeritageSelect={heritage => {
+            scrollTop();
+            setCurrentView({ type: 'detail', heritage, province: currentView.province });
+          }}
         />
       )}
 
       {currentView.type === 'detail' && (
         <HeritageDetail
           heritage={currentView.heritage}
-          onBack={() =>
-            setCurrentView({ type: 'list', province: currentView.province })
-          }
+          onBack={() => {
+            scrollTop();
+            setCurrentView({ type: 'list', province: currentView.province });
+          }}
         />
       )}
     </>

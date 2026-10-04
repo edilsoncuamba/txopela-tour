@@ -2,14 +2,17 @@ import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ChevronLeft, ChevronDown, ChevronUp, MapPin, Star, Heart, Share2 } from 'lucide-react';
 import { useFavorites } from '@/context/FavoritesContext';
+import GalleryCarousel from '@/components/GalleryCarousel';
 import ImageCarousel from '@/components/ImageCarousel';
 import ReviewManager from '@/components/ReviewManager';
 import { cultureApi } from '../api';
 import { useScrollTop } from '@/hooks/useScrollTop';
 import type { CulturalHeritage } from '../types';
 import { PLACEHOLDER_IMAGE } from '@/utils/dataValidation';
+import { translateUserType } from '@/utils/translations';
 import LocationCard from '@/components/shared/LocationCard';
 import { fromApi, hasLocation, buildFullAddress } from '@/utils/normalizeLocation';
+import { useTheme } from '@/context/ThemeContext';
 
 interface HeritageDetailProps {
   heritage: CulturalHeritage;
@@ -21,6 +24,17 @@ interface HeritageDetailProps {
 export default function HeritageDetail({ heritage, onBack }: HeritageDetailProps) {
   useScrollTop();
   const { isFavorite, toggleFavorite } = useFavorites();
+  const { isDark } = useTheme();
+  const dm = {
+    bg:      isDark ? '#0F1117' : '#F5F5F0',
+    surface: isDark ? '#1A1D27' : '#ffffff',
+    border:  isDark ? 'rgba(255,255,255,0.07)' : '#F3F4F6',
+    text:    isDark ? '#F0F4FF' : '#1A1A1A',
+    text2:   isDark ? '#A8B4CC' : '#374151',
+    muted:   isDark ? '#6B7A99' : '#94A3B8',
+    greenBg: isDark ? 'rgba(74,222,128,0.12)' : '#EEF7F0',
+    fadeBg:  isDark ? '#1A1D27' : 'white',
+  };
   const [heritageDetails, setHeritageDetails] = useState<CulturalHeritage>(heritage);
   const [isLoadingDetails, setIsLoadingDetails] = useState(false);
   const [viewIncremented, setViewIncremented] = useState(false);
@@ -59,25 +73,18 @@ export default function HeritageDetail({ heritage, onBack }: HeritageDetailProps
     }
   }, [heritage.id, viewIncremented]);
 
-  const typeColors: Record<string, string> = { 
-    guide: '#F4821F', 
-    traveler: '#2BB5C8', 
-    resident: '#1B5E3B', 
-    business: '#7B5EA7' 
+  const typeColors: Record<string, string> = {
+    guide: '#F4821F', curator: '#F4821F',
+    traveler: '#2BB5C8', tourist: '#2BB5C8',
+    resident: '#1B5E3B', local_resident: '#1B5E3B',
+    business: '#7B5EA7', local_business: '#7B5EA7',
   };
-  
-  const typeBg: Record<string, string> = { 
-    guide: '#FFF3E0', 
-    traveler: '#E0F7FA', 
-    resident: '#EEF7F0', 
-    business: '#F3E8FF' 
-  };
-  
-  const typeLabels: Record<string, string> = { 
-    guide: 'Guia', 
-    traveler: 'Viajante', 
-    resident: 'Residente', 
-    business: 'Instituição' 
+
+  const typeBg: Record<string, string> = {
+    guide: '#FFF3E0', curator: '#FFF3E0',
+    traveler: '#E0F7FA', tourist: '#E0F7FA',
+    resident: '#EEF7F0', local_resident: '#EEF7F0',
+    business: '#F3E8FF', local_business: '#F3E8FF',
   };
 
   const getClassBadgeColor = (classType: string) => {
@@ -105,7 +112,7 @@ export default function HeritageDetail({ heritage, onBack }: HeritageDetailProps
 
   return (
     <motion.div className="pb-16"
-      style={{ background: '#F5F5F0', fontFamily: 'Nunito, sans-serif' }}
+      style={{ background: dm.bg, fontFamily: 'Nunito, sans-serif' }}
       initial={{ opacity: 0, y: 10 }} 
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: 6 }}
@@ -117,85 +124,67 @@ export default function HeritageDetail({ heritage, onBack }: HeritageDetailProps
         {/* GALERIA — ocupa as 2 colunas, alinhada com o conteúdo */}
         <div
           className="md:col-span-2 -mx-4 md:mx-0"
-          onMouseEnter={() => setGalleryPaused(true)}
-          onMouseLeave={() => setGalleryPaused(false)}
         >
           <div className="relative w-full overflow-hidden md:rounded-2xl"
             style={{ height: 'clamp(270px, 30vw, 370px)' }}>
-            {heritageDetails.images && heritageDetails.images.length > 1 ? (
-              <ImageCarousel 
-                images={heritageDetails.images} 
-                autoPlay 
-                interval={3000} 
-                showControls 
-                showDots 
-                className="w-full h-full" 
-                objectFit="cover"
-                paused={galleryPaused}
-              />
-            ) : (
-              <img 
-                src={heritageDetails.mainImage || PLACEHOLDER_IMAGE} 
-                alt={heritageDetails.name} 
-                className="w-full h-full object-cover"
-                onError={e => { (e.target as HTMLImageElement).src = PLACEHOLDER_IMAGE; }} 
-              />
-            )}
-            <div className="absolute inset-0" style={{ background: 'linear-gradient(to top, rgba(0,0,0,0.75) 0%, rgba(0,0,0,0.05) 55%, transparent 100%)' }} />
-
-            {/* Header buttons */}
-            <div className="absolute top-0 left-0 right-0 z-10 flex items-center justify-between px-4 pt-5">
-              <button onClick={onBack} className="w-9 h-9 rounded-full flex items-center justify-center"
-                style={{ background: 'rgba(0,0,0,0.35)', backdropFilter: 'blur(8px)' }}>
-                <ChevronLeft size={20} className="text-white" strokeWidth={2.5} />
-              </button>
-              <div className="flex items-center gap-2">
-                <button className="w-9 h-9 rounded-full flex items-center justify-center"
+            <GalleryCarousel
+              images={heritageDetails.images && heritageDetails.images.length > 0 ? heritageDetails.images : [heritageDetails.mainImage || PLACEHOLDER_IMAGE]}
+              alt={heritageDetails.name}
+            >
+              {/* Header buttons — z-30 */}
+              <div className="absolute top-0 left-0 right-0 px-4 pt-5 flex items-center justify-between" style={{ zIndex: 3 }}>
+                <button onClick={onBack} className="w-9 h-9 rounded-full flex items-center justify-center"
                   style={{ background: 'rgba(0,0,0,0.35)', backdropFilter: 'blur(8px)' }}>
-                  <Share2 size={16} className="text-white" strokeWidth={2} />
+                  <ChevronLeft size={20} className="text-white" strokeWidth={2.5} />
                 </button>
-                <motion.button 
-                  whileTap={{ scale: 0.9 }} 
-                  onClick={() => toggleFavorite({
-                    id: heritageDetails.id,
-                    type: 'heritage',
-                    name: heritageDetails.name,
-                    image: heritageDetails.mainImage || PLACEHOLDER_IMAGE,
-                    tag: heritageDetails.category,
-                    rating: heritageDetails.rating || 0,
-                    provincia: heritageDetails.province,
-                    distrito: heritageDetails.district,
-                    raw: heritageDetails,
-                  })}
-                  className="w-9 h-9 rounded-full flex items-center justify-center"
-                  style={{ 
-                    background: isFavorite(heritageDetails.id) ? '#0EA5E9' : 'rgba(0,0,0,0.35)', 
-                    backdropFilter: 'blur(8px)' 
-                  }}>
-                  <Heart size={16} fill={isFavorite(heritageDetails.id) ? 'white' : 'none'} className="text-white" strokeWidth={2} />
-                </motion.button>
+                <div className="flex items-center gap-2">
+                  <button className="w-9 h-9 rounded-full flex items-center justify-center"
+                    style={{ background: 'rgba(0,0,0,0.35)', backdropFilter: 'blur(8px)' }}>
+                    <Share2 size={16} className="text-white" strokeWidth={2} />
+                  </button>
+                  <motion.button
+                    whileTap={{ scale: 0.9 }}
+                    onClick={() => toggleFavorite({
+                      id: heritageDetails.id,
+                      type: 'heritage',
+                      name: heritageDetails.name,
+                      image: heritageDetails.mainImage || PLACEHOLDER_IMAGE,
+                      tag: heritageDetails.category,
+                      rating: heritageDetails.rating || 0,
+                      provincia: heritageDetails.province,
+                      distrito: heritageDetails.district,
+                      raw: heritageDetails,
+                    })}
+                    className="w-9 h-9 rounded-full flex items-center justify-center"
+                    style={{
+                      background: isFavorite(heritageDetails.id) ? '#0EA5E9' : 'rgba(0,0,0,0.35)',
+                      backdropFilter: 'blur(8px)',
+                    }}>
+                    <Heart size={16} fill={isFavorite(heritageDetails.id) ? 'white' : 'none'} className="text-white" strokeWidth={2} />
+                  </motion.button>
+                </div>
               </div>
-            </div>
 
-            {/* Bottom info */}
-            <div className="absolute bottom-0 left-0 right-0 z-10 px-4 pb-4">
-              <div className="flex items-end justify-between">
-                <div className="flex items-center gap-2 flex-wrap">
-                  <div className="flex items-center gap-1">
-                    <MapPin size={12} className="text-white/70" />
-                    <span className="text-white/80 text-xs">{heritageDetails.province}</span>
-                  </div>
-                  <span className="text-white/40">·</span>
-                  <div className="flex items-center gap-1">
-                    <Star size={12} fill="#FBBF24" stroke="none" />
-                    <span className="text-white font-black text-xs">{heritageDetails.rating || '0.0'}</span>
-                    {heritageDetails.reviewsCount && heritageDetails.reviewsCount > 0 && (
-                      <span className="text-white/60 text-[10px]">({heritageDetails.reviewsCount})</span>
-                    )}
+              {/* Bottom info — z-30 */}
+              <div className="absolute bottom-0 left-0 right-0 px-4 pb-4" style={{ zIndex: 3 }}>
+                <div className="flex items-end justify-between">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <div className="flex items-center gap-1">
+                      <MapPin size={12} className="text-white/70" />
+                      <span className="text-white/80 text-xs">{heritageDetails.province}</span>
+                    </div>
+                    <span className="text-white/40">·</span>
+                    <div className="flex items-center gap-1">
+                      <Star size={12} fill="#FBBF24" stroke="none" />
+                      <span className="text-white font-black text-xs">{heritageDetails.rating || '0.0'}</span>
+                      {heritageDetails.reviewsCount && heritageDetails.reviewsCount > 0 && (
+                        <span className="text-white/60 text-[10px]">({heritageDetails.reviewsCount})</span>
+                      )}
+                    </div>
                   </div>
                 </div>
               </div>
-            </div>
+            </GalleryCarousel>
           </div>
         </div>
 
@@ -204,9 +193,9 @@ export default function HeritageDetail({ heritage, onBack }: HeritageDetailProps
 
           {/* Nome + categoria */}
           <div className="flex items-center justify-between">
-            <h1 className="text-xl font-black" style={{ color: '#1A1A1A' }}>{heritageDetails.name}</h1>
+            <h1 className="text-xl font-black" style={{ color: dm.text }}>{heritageDetails.name}</h1>
             <span className="text-xs font-black px-3 py-1 rounded-full flex-shrink-0 ml-2"
-              style={{ background: '#EEF7F0', color: '#1B5E3B' }}>
+              style={{ background: dm.greenBg, color: '#1B5E3B' }}>
               {heritageDetails.category}
             </span>
           </div>
@@ -226,23 +215,24 @@ export default function HeritageDetail({ heritage, onBack }: HeritageDetailProps
                 <p className="text-xs font-black flex-1 text-left" style={{ color: '#1A1A1A' }}>{author.name}</p>
                 <span className="text-[9px] font-bold px-2 py-0.5 rounded-full"
                   style={{ background: typeBg[author.type] || '#F3F4F6', color }}>
-                  {typeLabels[author.type] || author.type}
+                  {translateUserType(author.type)}
                 </span>
               </div>
             );
           })()}
 
           {/* Informações Gerais */}
-          <div className="bg-white rounded-2xl p-3.5 shadow-sm text-left space-y-3">
-            <h2 className="text-xs font-black" style={{ color: '#1A1A1A' }}>Informações Gerais</h2>
+          <div className="rounded-2xl p-3.5 shadow-sm text-left space-y-3"
+            style={{ background: dm.surface }}>
+            <h2 className="text-xs font-black" style={{ color: dm.text }}>Informações Gerais</h2>
 
-            <div className="pt-2 border-t" style={{ borderColor: '#F3F4F6' }}>
-              <p className="text-[10px] font-semibold mb-0.5" style={{ color: '#94A3B8' }}>Nome do Património</p>
-              <p className="text-xs font-bold" style={{ color: '#0F172A' }}>{heritageDetails.name}</p>
+            <div className="pt-2 border-t" style={{ borderColor: dm.border }}>
+              <p className="text-[10px] font-semibold mb-0.5" style={{ color: dm.muted }}>Nome do Património</p>
+              <p className="text-xs font-bold" style={{ color: dm.text }}>{heritageDetails.name}</p>
             </div>
 
-            <div className="pt-2 border-t" style={{ borderColor: '#F3F4F6' }}>
-              <p className="text-[10px] font-semibold mb-1.5" style={{ color: '#94A3B8' }}>Classificação Patrimonial</p>
+            <div className="pt-2 border-t" style={{ borderColor: dm.border }}>
+              <p className="text-[10px] font-semibold mb-1.5" style={{ color: dm.muted }}>Classificação Patrimonial</p>
               <div className="flex flex-wrap gap-1.5">
                 <span className="px-2.5 py-1 rounded-full text-xs font-bold text-white flex items-center gap-1"
                   style={{ background: getCriteriaBadgeColor(heritageDetails.criteria[0] || 'Cultural') }}>
@@ -301,9 +291,10 @@ export default function HeritageDetail({ heritage, onBack }: HeritageDetailProps
 
           {/* Bem Imóvel no Espaço Envolvente */}
           {heritageDetails.surroundingSpaceProperty && heritageDetails.surroundingSpaceProperty.length > 0 && (
-            <div className="bg-white rounded-2xl p-3.5 shadow-sm text-left space-y-3">
-              <h2 className="text-xs font-black" style={{ color: '#1A1A1A' }}>Bem Imóvel no Espaço Envolvente</h2>
-              <div className="pt-2 border-t" style={{ borderColor: '#F3F4F6' }}>
+            <div className="rounded-2xl p-3.5 shadow-sm text-left space-y-3"
+              style={{ background: dm.surface }}>
+              <h2 className="text-xs font-black" style={{ color: dm.text }}>Bem Imóvel no Espaço Envolvente</h2>
+              <div className="pt-2 border-t" style={{ borderColor: dm.border }}>
                 <div className="flex flex-wrap gap-1.5">
                   {heritageDetails.surroundingSpaceProperty.map((property, index) => (
                     <span key={index} className="px-2.5 py-1 rounded-full text-xs font-bold"
@@ -318,10 +309,11 @@ export default function HeritageDetail({ heritage, onBack }: HeritageDetailProps
 
           {/* Centro de Interpretação */}
           {heritageDetails.interpretationCenter && (
-            <div className="bg-white rounded-2xl p-3.5 shadow-sm text-left space-y-3">
-              <h2 className="text-xs font-black" style={{ color: '#1A1A1A' }}>Centro de Interpretação</h2>
-              <div className="pt-2 border-t" style={{ borderColor: '#F3F4F6' }}>
-                <p className="text-sm leading-relaxed" style={{ color: '#374151' }}>
+            <div className="rounded-2xl p-3.5 shadow-sm text-left space-y-3"
+              style={{ background: dm.surface }}>
+              <h2 className="text-xs font-black" style={{ color: dm.text }}>Centro de Interpretação</h2>
+              <div className="pt-2 border-t" style={{ borderColor: dm.border }}>
+                <p className="text-sm leading-relaxed" style={{ color: dm.text2 }}>
                   {heritageDetails.interpretationCenter}
                 </p>
               </div>
@@ -329,42 +321,40 @@ export default function HeritageDetail({ heritage, onBack }: HeritageDetailProps
           )}
 
           {/* Descrição histórica — colapsa após 10 linhas */}
-          <div className="bg-white rounded-2xl shadow-sm text-left overflow-hidden"
-            style={{ border: '1px solid #F3F4F6' }}>
+          <div className="rounded-2xl shadow-sm text-left overflow-hidden"
+            style={{ background: dm.surface, border: `1px solid ${dm.border}` }}>
 
             {/* Cabeçalho */}
-            <div className="px-3.5 py-2.5" style={{ borderBottom: '1px solid #F3F4F6', background: '#FAFAFA' }}>
-              <h2 className="text-xs font-black" style={{ color: '#1A1A1A' }}>Descrição Histórica</h2>
+            <div className="px-3.5 py-2.5"
+              style={{ borderBottom: `1px solid ${dm.border}`, background: isDark ? '#22263A' : '#FAFAFA' }}>
+              <h2 className="text-xs font-black" style={{ color: dm.text }}>Descrição Histórica</h2>
             </div>
 
             {(() => {
               const text = heritageDetails.description || '';
-              // Estima linhas a partir de caracteres (aprox. 60 chars/linha a 13px)
               const lines = text.split('\n');
               const estimatedLines = lines.reduce((acc, line) => acc + Math.max(1, Math.ceil((line.length || 1) / 58)), 0);
               const needsCollapse = estimatedLines > 10;
 
               return (
                 <div className="relative">
-                  {/* Texto */}
                   <div
                     style={{
-                      maxHeight: expandedDesc ? 'none' : '14.5rem', // ~10 linhas a 1.45rem
+                      maxHeight: expandedDesc ? 'none' : '14.5rem',
                       overflow: 'hidden',
                       position: 'relative',
                     }}
                   >
                     <p className="text-sm leading-relaxed text-justify px-3.5 py-3"
-                      style={{ color: '#374151' }}>
+                      style={{ color: dm.text2 }}>
                       {text}
                     </p>
-                    {/* Gradiente que cobre as últimas linhas quando colapsado */}
                     {needsCollapse && !expandedDesc && (
                       <div style={{
                         position: 'absolute',
                         bottom: 0, left: 0, right: 0,
                         height: '5rem',
-                        background: 'linear-gradient(to bottom, transparent, white)',
+                        background: `linear-gradient(to bottom, transparent, ${dm.fadeBg})`,
                         pointerEvents: 'none',
                       }} />
                     )}
@@ -406,6 +396,7 @@ export default function HeritageDetail({ heritage, onBack }: HeritageDetailProps
 
           {/* Sistema de Avaliações - ReviewManager */}
           <ReviewManager
+            key={heritageDetails.id}
             resourceType="local"
             resourceId={heritageDetails.id}
             showCreateForm={true}

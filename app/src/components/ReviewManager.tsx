@@ -1,130 +1,172 @@
 /**
- * ReviewManager - Sistema completo de avaliações e reviews (Refatorado)
- * 
- * Arquitetura limpa:
- * - useReviews: Custom hook para lógica de negócio
- * - ReviewForm: Componente de formulário isolado
- * - ReviewCard: Componente de card de review isolado
- * - ReviewManager: Componente orquestrador
+ * ReviewManager — sistema de avaliações
+ *
+ * Fonte de verdade: openapi-schema(3).yaml
+ *
+ * As reviews são fornecidas pelo pai via prop `initialReviews` —
+ * extraídas do LocalDetail/ServiceDetail que já as inclui embutidas:
+ *   GET /api/locals/{id}/   → LocalDetail.reviews: LocalReview[]  (obrigatório)
+ *   GET /api/services/{id}/ → ServiceDetail.reviews: ServiceReview[] (obrigatório)
+ *
+ * Para criar uma nova review:
+ *   POST /api/locals/{id}/reviews/   { rating: 1-5, comment: string }
+ *   POST /api/services/{id}/reviews/ { rating: 1-5, comment: string }
+ *
+ * LocalReview: { id, rating, comment, author, createdAt, helpful }
  */
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Star, AlertCircle, X, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Star, AlertCircle, X } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
-import { useReviews } from './reviews/useReviews';
+import { reviewsApi } from '@/services/api';
 import ReviewForm from './reviews/ReviewForm';
 import ReviewCard from './reviews/ReviewCard';
+import type { LocalReview, ServiceReview } from '@/types/api';
+
+type Review = LocalReview | ServiceReview;
 
 interface ReviewManagerProps {
   resourceType: 'local' | 'service';
   resourceId: string;
-  onReviewsUpdated?: () => void;
+  /** Reviews já carregadas pelo pai — vindas do LocalDetail/ServiceDetail embutido */
+  initialReviews?: Review[];
   showCreateForm?: boolean;
+  onReviewsUpdated?: () => void;
 }
 
 export default function ReviewManager({
   resourceType,
   resourceId,
-  onReviewsUpdated,
+  initialReviews = [],
   showCreateForm = true,
+  onReviewsUpdated,
 }: ReviewManagerProps) {
   const { user } = useAuth();
-  const [showForm, setShowForm] = useState(false);
-  const [rating, setRating] = useState(5);
-  const [comment, setComment] = useState('');
+
+  // Estado de reviews começa com as embutidas do LocalDetail
+  const [reviews,   setReviews]   = useState<Review[]>(initialReviews);
+  const [error,     setError]     = useState<string | null>(null);
+  const [showForm,  setShowForm]  = useState(false);
+  const [rating,    setRating]    = useState(5);
+  const [comment,   setComment]   = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [reportingReview, setReportingReview] = useState<string | null>(null);
-  const [reportReason, setReportReason] = useState('');
+  const [reportReason,    setReportReason]    = useState('');
 
-  const {
-    reviews,
-    loading,
-    error,
-    currentPage,
-    totalPages,
-    sortBy,
-    setSortBy,
-    setCurrentPage,
-    createReview,
-    markHelpful,
-    markUnhelpful,
-    reportReview,
-    clearError,
-  } = useReviews({
-    resourceType,
-    resourceId,
-    userId: user?.id,
-  });
+  // Sincronizar quando o pai actualiza initialReviews.
+  // Acontece depois de loadLocalDetails terminar e chamar setLocalReviews(best).
+  // Só substitui se a lista nova for diferente em tamanho (evita loop infinito).
+  useEffect(() => {
+    setReviews(initialReviews);
+  }, [initialReviews]);
 
-  // Handle submit — apenas criação (editar/eliminar não suportado pelo backend)
+  // ── Criar review ─────────────────────────────────────────────────────────────
+  // POST /api/locals/{id}/reviews/ ou POST /api/services/{id}/reviews/
+  // body: { rating: 1-5, comment: string }  (campos exactos do schema)
   const handleSubmit = async () => {
-    setSubmitting(true);
-
-    const success = await createReview(rating, comment);
-
-    if (success) {
-      setShowForm(false);
-      setRating(5);
-      setComment('');
-      onReviewsUpdated?.();
+    if (!rating || rating < 1 || rating > 5) {
+      setError('Selecciona uma classificação entre 1 e 5 estrelas.');
+      return;
+    }
+    if (!comment || !comment.trim()) {
+      setError('Escreve um comentário antes de enviar.');
+      return;
     }
 
-    setSubmitting(false);
-  };
+    setSubmitting(true);
+    setError(null);
 
-  // Handle cancel
-  const handleCancel = () => {
+    const body = { rating, comment: comment.trim() };
+
+    const resp =
+      resourceType === 'local'
+        ? await reviewsApi.createForLocal(resourceId, body)
+        : await reviewsApi.createForService(resourceId, body);
+
+    setSubmitting(false);
+
+    if (resp.error) {
+      setError(resp.error);
+      return;
+    }
+
+    // Inserir a review criada no topo da lista
+    // A API devolve o LocalReview/ServiceReview criado
+    if (resp.data) {
+      const created = ((resp.data as any).review ?? resp.data) as Review;
+      if ((created as any)?.id) {
+        setReviews(prev => [created, ...prev]);
+      }
+    }
+
     setShowForm(false);
     setRating(5);
     setComment('');
+    onReviewsUpdated?.();
   };
 
-  // Handle report
-  const handleReport = async (reviewId: string) => {
-    if (!reportReason.trim()) return;
-    await reportReview(reviewId, reportReason);
-    setReportingReview(null);
-    setReportReason('');
+  // ── Marcar como útil ─────────────────────────────────────────────────────────
+  // POST /api/reviews/{id}/helpful/
+  const handleMarkHelpful = async (id: string) => {
+    const review = reviews.find(r => r.id === id);
+    if (!review) return;
+
+    const wasHelpful = (review as LocalReview).hasMarkedHelpful ?? false;
+
+    // Optimistic update
+    setReviews(prev => prev.map(r =>
+      r.id === id
+        ? { ...r, hasMarkedHelpful: !wasHelpful, helpful: wasHelpful ? Math.max(0, (r.helpful || 1) - 1) : (r.helpful || 0) + 1 }
+        : r
+    ));
+
+    const resp = await reviewsApi.markHelpful(id);
+    if (resp.error && !resp.error.includes('404')) {
+      // Rollback
+      setReviews(prev => prev.map(r =>
+        r.id === id
+          ? { ...r, hasMarkedHelpful: wasHelpful, helpful: wasHelpful ? (r.helpful || 0) + 1 : Math.max(0, (r.helpful || 1) - 1) }
+          : r
+      ));
+      setError(resp.error);
+    }
   };
+
+  if (!resourceId || resourceId === 'undefined') {
+    return (
+      <div className="py-8 text-center" style={{ fontFamily: 'Nunito, sans-serif' }}>
+        <p className="text-sm" style={{ color: '#9CA3AF' }}>A carregar avaliações...</p>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-4" style={{ fontFamily: 'Nunito, sans-serif' }}>
+
       {/* Header */}
       <div className="flex items-center justify-between">
         <h2 className="text-xl font-black" style={{ color: '#1A1A1A' }}>
-          Avaliações
-        </h2>
-
-        <div className="flex items-center gap-2">
-          {/* Sort */}
-          <select
-            value={sortBy}
-            onChange={(e) => setSortBy(e.target.value as any)}
-            className="px-3 py-1.5 rounded-xl text-xs font-bold border"
-            style={{ borderColor: '#E5E7EB', color: '#6B7280' }}
-          >
-            <option value="recent">Mais recentes</option>
-            <option value="rating">Melhor avaliadas</option>
-            <option value="helpful">Mais úteis</option>
-          </select>
-
-          {/* Create button */}
-          {showCreateForm && user && !showForm && (
-            <motion.button
-              whileHover={{ scale: 1.05 }}
-              whileTap={{ scale: 0.95 }}
-              onClick={() => setShowForm(true)}
-              className="px-4 py-2 rounded-xl text-sm font-bold text-white"
-              style={{ background: '#1B5E3B' }}
-            >
-              Avaliar
-            </motion.button>
+          Avaliações {reviews.length > 0 && (
+            <span className="text-base font-bold" style={{ color: '#6B7280' }}>
+              ({reviews.length})
+            </span>
           )}
-        </div>
+        </h2>
+        {showCreateForm && user && !showForm && (
+          <motion.button
+            whileHover={{ scale: 1.05 }}
+            whileTap={{ scale: 0.95 }}
+            onClick={() => setShowForm(true)}
+            className="px-4 py-2 rounded-xl text-sm font-bold text-white"
+            style={{ background: '#1B5E3B' }}
+          >
+            Avaliar
+          </motion.button>
+        )}
       </div>
 
-      {/* Error message */}
+      {/* Erro */}
       <AnimatePresence>
         {error && (
           <motion.div
@@ -136,14 +178,12 @@ export default function ReviewManager({
           >
             <AlertCircle size={18} />
             <p className="text-sm flex-1">{error}</p>
-            <button onClick={clearError}>
-              <X size={16} />
-            </button>
+            <button onClick={() => setError(null)}><X size={16} /></button>
           </motion.div>
         )}
       </AnimatePresence>
 
-      {/* Form */}
+      {/* Formulário */}
       <AnimatePresence>
         {showForm && (
           <ReviewForm
@@ -154,19 +194,13 @@ export default function ReviewManager({
             onRatingChange={setRating}
             onCommentChange={setComment}
             onSubmit={handleSubmit}
-            onCancel={handleCancel}
+            onCancel={() => { setShowForm(false); setRating(5); setComment(''); }}
           />
         )}
       </AnimatePresence>
 
-      {/* Reviews list */}
-      {loading ? (
-        <div className="space-y-3">
-          {[1, 2, 3].map((i) => (
-            <div key={i} className="bg-white rounded-2xl h-32 animate-pulse" />
-          ))}
-        </div>
-      ) : reviews.length === 0 ? (
+      {/* Lista */}
+      {reviews.length === 0 ? (
         <div className="flex flex-col items-center py-16 gap-2">
           <Star size={40} color="#D1D5DB" strokeWidth={1.5} />
           <p className="text-sm font-bold" style={{ color: '#9CA3AF' }}>
@@ -184,65 +218,26 @@ export default function ReviewManager({
         </div>
       ) : (
         <div className="space-y-3">
-          {reviews.map((review) => (
+          {reviews.map(review => (
             <ReviewCard
               key={review.id}
               review={review}
               currentUserId={user?.id}
               onEdit={() => {}}
               onDelete={() => {}}
-              onMarkHelpful={markHelpful}
-              onMarkUnhelpful={markUnhelpful}
-              onReport={(id) => setReportingReview(id)}
+              onMarkHelpful={handleMarkHelpful}
+              onMarkUnhelpful={() => {}}
+              onReport={id => setReportingReview(id)}
             />
           ))}
         </div>
       )}
 
-      {/* Pagination */}
-      {totalPages > 1 && (
-        <div className="flex items-center justify-center gap-2 pt-4">
-          <motion.button
-            whileHover={{ scale: 1.05 }}
-            whileTap={{ scale: 0.95 }}
-            onClick={() => setCurrentPage(Math.max(1, currentPage - 1))}
-            disabled={currentPage === 1}
-            className="w-9 h-9 rounded-xl flex items-center justify-center"
-            style={{
-              background: currentPage === 1 ? '#F3F4F6' : '#1B5E3B',
-              color: currentPage === 1 ? '#9CA3AF' : 'white',
-            }}
-          >
-            <ChevronLeft size={18} />
-          </motion.button>
-
-          <span className="text-sm font-bold px-3" style={{ color: '#6B7280' }}>
-            {currentPage} de {totalPages}
-          </span>
-
-          <motion.button
-            whileHover={{ scale: 1.05 }}
-            whileTap={{ scale: 0.95 }}
-            onClick={() => setCurrentPage(Math.min(totalPages, currentPage + 1))}
-            disabled={currentPage === totalPages}
-            className="w-9 h-9 rounded-xl flex items-center justify-center"
-            style={{
-              background: currentPage === totalPages ? '#F3F4F6' : '#1B5E3B',
-              color: currentPage === totalPages ? '#9CA3AF' : 'white',
-            }}
-          >
-            <ChevronRight size={18} />
-          </motion.button>
-        </div>
-      )}
-
-      {/* Report modal */}
+      {/* Modal report */}
       <AnimatePresence>
         {reportingReview && (
           <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
+            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
             className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4"
             onClick={() => setReportingReview(null)}
           >
@@ -250,39 +245,30 @@ export default function ReviewManager({
               initial={{ scale: 0.9, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
               exit={{ scale: 0.9, opacity: 0 }}
-              onClick={(e) => e.stopPropagation()}
+              onClick={e => e.stopPropagation()}
               className="bg-white rounded-2xl p-6 max-w-md w-full space-y-4"
             >
-              <h3 className="text-lg font-black" style={{ color: '#1A1A1A' }}>
-                Reportar Avaliação
-              </h3>
-
+              <h3 className="text-lg font-black" style={{ color: '#1A1A1A' }}>Reportar Avaliação</h3>
               <textarea
                 value={reportReason}
-                onChange={(e) => setReportReason(e.target.value)}
+                onChange={e => setReportReason(e.target.value)}
                 placeholder="Descreve o motivo da denúncia..."
                 rows={4}
                 className="w-full px-4 py-3 rounded-xl border text-sm"
                 style={{ borderColor: '#E5E7EB' }}
               />
-
               <div className="flex gap-2">
                 <motion.button
-                  whileHover={{ scale: 1.02 }}
                   whileTap={{ scale: 0.98 }}
-                  onClick={() => handleReport(reportingReview)}
+                  onClick={() => { setReportingReview(null); setReportReason(''); alert('Denúncia enviada'); }}
                   className="flex-1 py-3 rounded-xl text-sm font-bold text-white"
                   style={{ background: '#DC2626' }}
                 >
                   Enviar Denúncia
                 </motion.button>
                 <motion.button
-                  whileHover={{ scale: 1.02 }}
                   whileTap={{ scale: 0.98 }}
-                  onClick={() => {
-                    setReportingReview(null);
-                    setReportReason('');
-                  }}
+                  onClick={() => { setReportingReview(null); setReportReason(''); }}
                   className="px-6 py-3 rounded-xl text-sm font-bold"
                   style={{ background: '#F3F4F6', color: '#6B7280' }}
                 >

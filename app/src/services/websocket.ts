@@ -2,6 +2,7 @@
  * WebSocket Service para sincronização em tempo real
  * Sincroniza localizações, posts, reviews e notificações entre todos os usuários
  */
+import { tokenStore } from '@/services/tokenStore';
 
 type MessageType = 'location_created' | 'location_updated' | 'location_deleted' | 
                    'post_created' | 'post_updated' | 'post_deleted' |
@@ -49,7 +50,7 @@ class WebSocketService {
     const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000/api';
     const wsProtocol = apiUrl.startsWith('https') ? 'wss' : 'ws';
     const wsHost = apiUrl.replace(/^https?:\/\//, '').replace(/\/api$/, '');
-    const token = localStorage.getItem('txopela_token');
+    const token = tokenStore.getAccess();
     
     this.url = url || `${wsProtocol}://${wsHost}/ws/locations/?token=${token}`;
   }
@@ -71,7 +72,7 @@ class WebSocketService {
           this.reconnectAttempts = 0;
           
           // Enviar token de autenticação
-          const token = localStorage.getItem('txopela_token');
+          const token = tokenStore.getAccess();
           if (token) {
             this.send({
               type: 'user_online' as MessageType,

@@ -3,13 +3,23 @@
  * Usado em AddLocal e AddService para selecionar a localização do lugar/serviço.
  *
  * ARQUITECTURA:
+ * - Reverse geocoding: GET /api/locals/geocode/?lat=&lon= (OpenAPI: GeocodeResponse)
+ *   → devolve province, district, locality, country, address
+ *   → se o backend falhar (500/rede), campos ficam vazios e utilizador preenche manualmente
+ * - Pesquisa: GET /api/locals/search/?q= (OpenAPI: SearchResponse)
+ *   → pesquisa locais já cadastrados na plataforma (não é geocoding geográfico geral)
+ *   → se não devolver resultados, utilizador usa o mapa directamente
  * - Todos os campos geo ficam em state local → mostrados em tempo real
  * - useRef para applyPosition/moveMarker → evita closures stale no dragend
- * - Reverse geocoding com debounce 500ms → dispara a cada clique/arraste/GPS/pesquisa
+ * - Debounce 600ms no geocoding → dispara a cada clique/arraste/GPS
+ *
+ * BACKEND NECESSÁRIO (OpenAPI):
+ *   GET /api/locals/geocode/?lat=&lon=  → GeocodeResponse { province, district, locality, country, address }
+ *   GET /api/locals/search/?q=          → SearchResponse { data: { results: [...] } }
  */
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { buildFullAddress } from '@/utils/normalizeLocation';
-import { classifyAdminData } from '@/utils/mozambiqueAdminData';
+import { localsApi } from '@/services/api';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   MapPin, Navigation, Search, X, AlertCircle,
@@ -72,123 +82,86 @@ async function loadLeaflet(): Promise<any> {
   return (window as any).L;
 }
 
-// ─── Normalização Nominatim ───────────────────────────────────────────────────
-
-function normalizeLocationData(data: any): Partial<GeoFields> {
-  const a = data.address || {};
-
-  if (import.meta.env.DEV) {
-    console.log('[LocationPicker] Nominatim address fields:', JSON.stringify(a, null, 2));
-  }
-
-  // Classificar com validação cruzada contra a base administrativa de MZ.
-  // IMPORTANTE: town/city/village/hamlet são passados APENAS para localidade,
-  // NUNCA para o campo distrito.
-  const classified = classifyAdminData({
-    country:            a.country,
-    state:              a.state || a.region,
-    // Apenas municipality e county podem ser distrito
-    municipality:       a.municipality,
-    county:             a.county,
-    // Estes campos vão para localidade/posto, nunca para distrito
-    town:               a.town,
-    city:               a.city,
-    village:            a.village,
-    hamlet:             a.hamlet,
-    suburb:             a.suburb,
-    locality:           a.locality,
-    administrative_post: a.locality || a.suburb || a.quarter,
-    quarter:            a.quarter,
-    neighbourhood:      a.neighbourhood,
-  });
-
-  if (import.meta.env.DEV && classified.warnings.length > 0) {
-    console.warn('[LocationPicker] Warnings:', classified.warnings);
-    console.log('[LocationPicker] Classified:', classified);
-  }
-
-  return {
-    country:            classified.country  || undefined,
-    province:           classified.province || undefined,
-    // district: APENAS valor validado como Distrito — nunca town/city/village
-    district:           classified.district || undefined,
-    administrative_post: classified.administrativePost || undefined,
-    // city/locality = Localidade/Vila/Cidade — nível exclusivo
-    city:               classified.city || undefined,
-    administrative_area: a.suburb || a.quarter || undefined,
-    locality:           classified.city || a.locality || undefined,
-    suburb:             a.suburb  || undefined,
-    address:            data.display_name || undefined,
-  };
-}
+// ─── Reverse geocoding via backend ───────────────────────────────────────────
+// OpenAPI: GET /api/locals/geocode/?lat=&lon=
+// Resposta: GeocodeResponse { province, district, locality, country, address,
+//           displayName, latitude, longitude, success }
+//
+// Se o backend falhar (500 / rede), devolve {} — os campos manuais ficam disponíveis
+// para o utilizador preencher. O mapa continua a funcionar independentemente.
+//
+// NOTA: se este endpoint continua a retornar 500, é necessário corrigir o backend.
+// Ver secção "O que o backend precisa" no README ou comunicar ao dev backend.
 
 async function reverseGeocode(lat: number, lng: number): Promise<Partial<GeoFields>> {
   try {
-    // zoom=14 dá detalhes até ao nível de bairro/localidade; addressdetails=1 devolve todos os campos
-    const res = await fetch(
-      `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lng}&format=json&accept-language=pt&addressdetails=1&zoom=14`,
-      { headers: { 'Accept-Language': 'pt', 'User-Agent': 'TxopelaTour/1.0' } },
-    );
-    if (!res.ok) return {};
-    const data = await res.json();
-    return normalizeLocationData(data);
-  } catch { return {}; }
+    // OpenAPI: GET /api/locals/geocode/?lat={lat}&lon={lon}
+    // localsApi.geocode() usa este endpoint conforme definido em api.ts
+    const res = await localsApi.geocode(lat, lng);
+    if (!res.data) return {};
+
+    const d = res.data;
+
+    if (import.meta.env.DEV) {
+      console.log('[LocationPicker] /geocode/ resposta:', d);
+    }
+
+    // GeocodeResponse: { province, district, locality, country, address, displayName }
+    return {
+      country:  d.country   || 'Moçambique',
+      province: d.province  || undefined,
+      district: d.district  || undefined,
+      // locality = Localidade/Vila/Cidade
+      city:     d.locality  || undefined,
+      locality: d.locality  || undefined,
+      // address = endereço formatado completo (displayName ou address)
+      address:  d.address   || d.displayName || undefined,
+    };
+  } catch (e) {
+    console.warn('[LocationPicker] /api/locals/geocode/ falhou:', e);
+    return {};
+  }
 }
 
-/**
- * Procura o POI mais próximo num raio de 1 km via Nominatim.
- * Devolve SOMENTE o nome do POI mais próximo, ou undefined se nenhum encontrado.
- * NÃO usa província/distrito/cidade como fallback.
- */
-async function findNearestPOI(lat: number, lng: number): Promise<string | undefined> {
+// ─── Pesquisa via backend ─────────────────────────────────────────────────────
+// OpenAPI: GET /api/locals/search/?q=
+// Resposta: SearchResponse { data: { results: [...LocalList] } }
+//
+// NOTA: este endpoint pesquisa locais JÁ CADASTRADOS na plataforma.
+// Não é um geocoder geográfico geral como o Nominatim.
+// O utilizador encontra apenas lugares que outros já submeteram.
+// Para pesquisa geográfica livre, o backend precisaria de expor um endpoint
+// de geocoding de texto → coordenadas (não está no OpenAPI actual).
+
+async function searchLocals(query: string): Promise<Array<{
+  name: string;
+  lat: number;
+  lng: number;
+  province?: string;
+  display_name?: string;
+}>> {
   try {
-    // Usar Overpass API para encontrar POIs num raio de 1km
-    const query = `
-      [out:json][timeout:8];
-      (
-        node["amenity"](around:1000,${lat},${lng});
-        node["tourism"](around:1000,${lat},${lng});
-        node["shop"~"supermarket|mall|market"](around:1000,${lat},${lng});
-        node["leisure"~"park|stadium|sports_centre"](around:1000,${lat},${lng});
-      );
-      out body;
-    `;
-    const res = await fetch('https://overpass-api.de/api/interpreter', {
-      method: 'POST',
-      body: `data=${encodeURIComponent(query)}`,
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    });
-    if (!res.ok) return undefined;
-    const data = await res.json();
+    // OpenAPI: GET /api/locals/search/?q={query}
+    const res = await localsApi.search(query.trim());
+    const items: any[] = res.data?.results ?? (Array.isArray(res.data) ? res.data : []);
 
-    const elements: any[] = data.elements || [];
-    if (elements.length === 0) return undefined;
-
-    // Calcular distância de cada elemento e ordenar
-    const withDist = elements
-      .filter(e => e.lat !== undefined && e.lon !== undefined)
-      .map(e => {
-        const dLat = (e.lat - lat) * Math.PI / 180;
-        const dLng = (e.lon - lng) * Math.PI / 180;
-        const a = Math.sin(dLat / 2) ** 2 +
-          Math.cos(lat * Math.PI / 180) * Math.cos(e.lat * Math.PI / 180) *
-          Math.sin(dLng / 2) ** 2;
-        const dist = 6371000 * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-        return { ...e, dist };
+    return items
+      .map(r => {
+        const rLat = parseFloat(r.location?.latitude ?? r.location?.lat ?? r.lat ?? '0');
+        const rLng = parseFloat(r.location?.longitude ?? r.location?.lng ?? r.lon ?? r.lng ?? '0');
+        if (isNaN(rLat) || isNaN(rLng) || (rLat === 0 && rLng === 0)) return null;
+        return {
+          name:         r.name || r.title || '',
+          lat:          rLat,
+          lng:          rLng,
+          province:     r.location?.province || r.province || undefined,
+          display_name: [r.name, r.location?.province].filter(Boolean).join(', '),
+        };
       })
-      .filter(e => e.dist <= 1000) // máximo 1 km
-      .sort((a, b) => a.dist - b.dist);
-
-    if (withDist.length === 0) return undefined;
-
-    // Nome do POI mais próximo
-    const nearest = withDist[0];
-    const name = nearest.tags?.name || nearest.tags?.['name:pt'] || undefined;
-    if (!name) return undefined;
-
-    return `Perto de ${name}`;
-  } catch {
-    return undefined;
+      .filter((r): r is NonNullable<typeof r> => r !== null);
+  } catch (e) {
+    console.warn('[LocationPicker] /api/locals/search/ falhou:', e);
+    return [];
   }
 }
 
@@ -304,16 +277,16 @@ export default function LocationPicker({
     if (debounceRef.current) clearTimeout(debounceRef.current);
     setGeocoding(true);
     debounceRef.current = setTimeout(async () => {
-      // Executar reverse geocoding e pesquisa de POI em paralelo
-      const [result, nearestPoi] = await Promise.all([
-        reverseGeocode(newLat, newLng),
-        findNearestPOI(newLat, newLng),
-      ]);
+      // Reverse geocoding: GET /api/locals/geocode/?lat=&lon= (OpenAPI)
+      // GeocodeResponse → province, district, locality, country, address
+      // Se o backend retornar erro, result = {} → campos ficam vazios para preenchimento manual
+      const result = await reverseGeocode(newLat, newLng);
 
-      // POI mais próximo → sugestão (undefined se não encontrado no raio de 1km)
+      // nearby_reference_suggestion não está disponível sem Overpass (API externa removida).
+      // O campo fica undefined — o utilizador pode preencher manualmente o campo "Perto de".
       const resultWithPoi: Partial<GeoFields> = {
         ...result,
-        nearby_reference_suggestion: nearestPoi,
+        nearby_reference_suggestion: undefined,
       };
 
       // Sempre atualizar TODOS os campos, mesmo que vazios
@@ -436,11 +409,13 @@ export default function LocationPicker({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Invalidar tamanho ao ficar visível
+  // Invalidar tamanho ao ficar visível — delay maior para garantir que a animação terminou
   useEffect(() => {
     if (!mapReady) return;
-    const t = setTimeout(() => leafletMap.current?.invalidateSize(false), 150);
-    return () => clearTimeout(t);
+    // Dois passes: 150ms para o layout inicial, 500ms para o caso de animações de transição
+    const t1 = setTimeout(() => leafletMap.current?.invalidateSize(false), 150);
+    const t2 = setTimeout(() => leafletMap.current?.invalidateSize(false), 500);
+    return () => { clearTimeout(t1); clearTimeout(t2); };
   }, [mapReady]);
 
   // Pedir GPS automaticamente ao montar se não há coords iniciais
@@ -483,27 +458,31 @@ export default function LocationPicker({
     );
   }, []);
 
-  // ── Pesquisa ──────────────────────────────────────────────────────────────
+  // ── Pesquisa — usa GET /api/locals/search/?q= (OpenAPI: SearchResponse) ──────
+  // Pesquisa locais JÁ CADASTRADOS na plataforma. Não é geocoding geográfico.
+  // Se o backend não devolver resultados, o utilizador usa o mapa directamente.
   const handleSearch = useCallback(async () => {
     if (!searchQuery.trim()) return;
     setSearchLoading(true);
     setShowResults(false);
     try {
-      const res = await fetch(
-        `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(searchQuery)}&format=json&limit=5&accept-language=pt&countrycodes=mz`,
-        { headers: { 'Accept-Language': 'pt', 'User-Agent': 'TxopelaTour/1.0' } },
-      );
-      setSearchResults(await res.json());
+      const results = await searchLocals(searchQuery.trim());
+      setSearchResults(results);
       setShowResults(true);
-    } catch { setSearchResults([]); }
-    finally { setSearchLoading(false); }
+    } catch {
+      setSearchResults([]);
+      setShowResults(true); // mostra "sem resultados"
+    } finally {
+      setSearchLoading(false);
+    }
   }, [searchQuery]);
 
   const selectResult = useCallback((r: any) => {
-    const rLat = parseFloat(r.lat);
-    const rLng = parseFloat(r.lon);
+    const rLat = typeof r.lat === 'number' ? r.lat : parseFloat(r.lat ?? 0);
+    const rLng = typeof r.lng === 'number' ? r.lng : parseFloat(r.lng ?? 0);
+    if (isNaN(rLat) || isNaN(rLng) || (rLat === 0 && rLng === 0)) return;
     setShowResults(false);
-    setSearchQuery(r.display_name?.split(',')[0] || '');
+    setSearchQuery(r.name || r.display_name?.split(',')[0] || '');
     moveMarkerRef.current?.(rLat, rLng, true);
     applyPositionRef.current?.(rLat, rLng, undefined, 'search');
   }, []);
@@ -602,7 +581,21 @@ export default function LocationPicker({
                   className="w-full flex items-start gap-2 px-4 py-3 text-left hover:bg-gray-50 border-b last:border-0 transition-colors"
                   style={{ borderColor: '#F3F4F6' }}>
                   <MapPin size={14} style={{ color: '#7B5EA7', flexShrink: 0, marginTop: 2 }} />
-                  <span className="text-xs font-semibold leading-snug" style={{ color: '#1A1A1A' }}>{r.display_name}</span>
+                  <div className="min-w-0">
+                    <span className="text-xs font-semibold leading-snug block truncate" style={{ color: '#1A1A1A' }}>
+                      {r.name || r.display_name || ''}
+                    </span>
+                    {r.province && (
+                      <span className="text-[10px] leading-tight" style={{ color: '#6B7280' }}>
+                        {r.province}
+                      </span>
+                    )}
+                    {!r.province && r.display_name && (
+                      <span className="text-[10px] leading-tight block truncate" style={{ color: '#6B7280' }}>
+                        {r.display_name}
+                      </span>
+                    )}
+                  </div>
                 </button>
               ))}
             </motion.div>
@@ -788,32 +781,6 @@ export default function LocationPicker({
                   className="w-full px-4 py-3 rounded-2xl border bg-white text-sm focus:outline-none"
                   style={{ borderColor: nearbyRef ? '#1B5E3B' : '#E5E7EB', color: '#1A1A1A', fontFamily: 'Nunito, sans-serif' }}
                 />
-                {/* Sugestão automática */}
-                <AnimatePresence>
-                  {geo.nearby_reference_suggestion && !nearbyRef && (
-                    <motion.button
-                      type="button"
-                      initial={{ opacity: 0, y: -4 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      exit={{ opacity: 0, y: -4 }}
-                      onClick={() => handleRefChange(geo.nearby_reference_suggestion!)}
-                      style={{
-                        width: '100%', marginTop: 8, display: 'flex', alignItems: 'center', gap: 10,
-                        padding: '10px 12px', borderRadius: 16, border: '2px solid #1B5E3B',
-                        background: '#EEF7F0', cursor: 'pointer', textAlign: 'left',
-                      }}
-                    >
-                      <div style={{ width: 28, height: 28, borderRadius: '50%', background: '#1B5E3B', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                        <MapPin size={14} color="white" />
-                      </div>
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <p style={{ margin: 0, fontSize: 10, fontWeight: 700, color: '#1B5E3B', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 2 }}>Sugestão automática</p>
-                        <p style={{ margin: 0, fontSize: 12, fontWeight: 800, color: '#1A1A1A', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{geo.nearby_reference_suggestion}</p>
-                      </div>
-                      <span style={{ fontSize: 10, fontWeight: 900, padding: '4px 8px', borderRadius: 8, background: '#1B5E3B', color: 'white', flexShrink: 0 }}>Usar</span>
-                    </motion.button>
-                  )}
-                </AnimatePresence>
               </div>
 
               {/* Endereço completo — gerado a partir dos campos actuais, actualiza em tempo real */}

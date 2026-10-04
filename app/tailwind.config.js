@@ -1,6 +1,8 @@
 /** @type {import('tailwindcss').Config} */
 module.exports = {
-  darkMode: ["class"],
+  // darkMode usa um selector customizado no wrapper da app autenticada.
+  // NUNCA aplica .dark no <html> — isso eliminaria o estado híbrido.
+  darkMode: ["selector", '[data-theme="dark"]'],
   content: ['./index.html', './src/**/*.{js,ts,jsx,tsx}'],
   theme: {
     extend: {

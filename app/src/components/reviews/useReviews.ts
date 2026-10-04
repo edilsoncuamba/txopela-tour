@@ -1,326 +1,186 @@
 /**
- * useReviews - Hook customizado para gerenciar reviews
+ * useReviews — hook de avaliações
+ *
+ * Fonte de verdade: openapi-schema(3).yaml
+ *
+ * Endpoints usados:
+ *   GET  /api/locals/{id}/reviews/   → LocalReview[]
+ *   GET  /api/services/{id}/reviews/ → ServiceReview[]
+ *   POST /api/locals/{id}/reviews/   { rating: 1-5, comment: string }
+ *   POST /api/services/{id}/reviews/ { rating: 1-5, comment: string }
+ *
+ * LocalReview: { id, rating, comment, author, createdAt, helpful }
  */
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect } from 'react';
 import { reviewsApi } from '@/services/api';
 import type { LocalReview, ServiceReview } from '@/types/api';
 
 type Review = LocalReview | ServiceReview;
 
-interface UseReviewsParams {
-  resourceType: 'local' | 'service';
-  resourceId: string;
-  userId?: string;
-}
-
-interface UseReviewsReturn {
+export interface UseReviewsReturn {
   reviews: Review[];
   loading: boolean;
   error: string | null;
-  currentPage: number;
-  totalPages: number;
-  sortBy: 'recent' | 'rating' | 'helpful';
-  setSortBy: (sort: 'recent' | 'rating' | 'helpful') => void;
-  setCurrentPage: (page: number) => void;
-  loadReviews: () => Promise<void>;
+  rawDebug: unknown;           // debug: resposta bruta da API
+  reload: () => void;
   createReview: (rating: number, comment: string) => Promise<boolean>;
   markHelpful: (id: string) => Promise<void>;
-  markUnhelpful: (id: string) => Promise<void>;
-  reportReview: (id: string, reason: string) => Promise<void>;
   clearError: () => void;
 }
 
-export function useReviews({
-  resourceType,
-  resourceId,
-  userId,
-}: UseReviewsParams): UseReviewsReturn {
-  const [reviews, setReviews] = useState<Review[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [currentPage, setCurrentPage] = useState(1);
-  const [totalPages, setTotalPages] = useState(1);
-  const [sortBy, setSortBy] = useState<'recent' | 'rating' | 'helpful'>('recent');
+export function useReviews(
+  resourceType: 'local' | 'service',
+  resourceId: string,
+): UseReviewsReturn {
+  const [reviews,  setReviews]  = useState<Review[]>([]);
+  const [loading,  setLoading]  = useState(false);
+  const [error,    setError]    = useState<string | null>(null);
+  const [rawDebug, setRawDebug] = useState<unknown>(null);
+  const [tick,     setTick]     = useState(0);   // incrementado para forçar reload
 
-  // Load reviews
-  const loadReviews = useCallback(async () => {
-    try {
+  // ── fetch ────────────────────────────────────────────────────────────────────
+  useEffect(() => {
+    if (!resourceId || resourceId === 'undefined' || resourceId === 'null') {
+      console.warn('[useReviews] resourceId inválido:', resourceId);
+      return;
+    }
+
+    let cancelled = false;
+
+    const run = async () => {
       setLoading(true);
       setError(null);
 
-      const response =
-        resourceType === 'local'
-          ? await reviewsApi.getForLocal(resourceId, { page: currentPage, limit: 10 })
-          : await reviewsApi.getForService(resourceId, { page: currentPage, limit: 10 });
+      console.log(`[useReviews] GET ${resourceType} reviews — id: ${resourceId}`);
 
-      if (response.error) {
-        if (response.error.includes('404')) {
-          setReviews([]);
-          setError(null);
-        } else if (response.error.includes('500')) {
-          setReviews([]);
-          setError('Sistema de avaliações temporariamente indisponível');
-          console.warn('Endpoint retornou 500:', response.error);
-        } else {
-          setError(response.error);
-        }
+      const resp =
+        resourceType === 'local'
+          ? await reviewsApi.getForLocal(resourceId)
+          : await reviewsApi.getForService(resourceId);
+
+      if (cancelled) return;
+
+      // Guardar resposta bruta para debug
+      setRawDebug(resp);
+      console.log('[useReviews] resposta bruta completa:', JSON.stringify(resp, null, 2));
+
+      if (resp.error) {
+        console.warn('[useReviews] erro da API:', resp.error);
+        // 404 = sem reviews ainda — não é erro de UI
+        if (!resp.error.includes('404')) setError(resp.error);
+        setReviews([]);
+        setLoading(false);
         return;
       }
 
-      const data = response.data;
-      const reviewsList = data?.reviews || data?.results || [];
-      setReviews(Array.isArray(reviewsList) ? reviewsList : []);
+      // ── Normalizar a resposta para sempre obter Review[] ──────────────────
+      // O schema diz que a API retorna array directo.
+      // O apiFetch extrai body.data se existir.
+      // Possibilidades reais:
+      //   resp.data = Review[]                    (array directo — schema)
+      //   resp.data = { results: Review[] }       (DRF paginado)
+      //   resp.data = { reviews: Review[] }       (envelope custom)
+      //   resp.data = { data: Review[] }          (envelope duplo improvável)
+      //   resp.data = null | undefined            (sem conteúdo)
+      const raw = resp.data;
+      let list: Review[] = [];
 
-      if (data?.pagination) {
-        setTotalPages(data.pagination.totalPages || 1);
-      }
-    } catch (err) {
-      setReviews([]);
-      setError('Erro ao carregar avaliações');
-      console.error('Erro ao carregar reviews:', err);
-    } finally {
-      setLoading(false);
-    }
-  }, [resourceId, resourceType, currentPage, sortBy]);
-
-  // Create review
-  const createReview = async (rating: number, comment: string): Promise<boolean> => {
-    try {
-      setError(null);
-      const body = { rating, comment };
-
-      const response =
-        resourceType === 'local'
-          ? await reviewsApi.createForLocal(resourceId, body)
-          : await reviewsApi.createForService(resourceId, body);
-
-      if (response.error) {
-        if (response.error.includes('500')) {
-          setError('Erro no servidor. Contacta o administrador.');
-        } else if (response.error.includes('404')) {
-          setError('Recurso não encontrado.');
-        } else {
-          setError(response.error);
+      if (Array.isArray(raw)) {
+        list = raw;
+      } else if (raw && typeof raw === 'object') {
+        const r = raw as Record<string, unknown>;
+        if      (Array.isArray(r.results)) list = r.results as Review[];
+        else if (Array.isArray(r.reviews)) list = r.reviews as Review[];
+        else if (Array.isArray(r.data))    list = r.data    as Review[];
+        else {
+          // Último recurso: se for um objecto com id e rating, é uma review única
+          if ('id' in r && 'rating' in r) list = [raw as Review];
         }
-        return false;
       }
 
-      await loadReviews();
-      return true;
-    } catch (err) {
-      setError('Erro ao submeter avaliação');
-      console.error(err);
+      console.log(`[useReviews] ${list.length} review(s) extraída(s):`, list);
+      setReviews(list);
+      setLoading(false);
+    };
+
+    run();
+    return () => { cancelled = true; };
+  }, [resourceId, resourceType, tick]);
+
+  const reload = () => setTick(t => t + 1);
+
+  // ── criar review ─────────────────────────────────────────────────────────────
+  const createReview = async (rating: number, comment: string): Promise<boolean> => {
+    if (!rating || rating < 1 || rating > 5) {
+      setError('Selecciona uma classificação entre 1 e 5 estrelas.');
       return false;
     }
+    if (!comment || !comment.trim()) {
+      setError('Escreve um comentário antes de enviar.');
+      return false;
+    }
+    if (!resourceId || resourceId === 'undefined') {
+      setError('ID do recurso inválido.');
+      return false;
+    }
+
+    setError(null);
+    const body = { rating, comment: comment.trim() };
+    console.log('[useReviews] POST review:', body, 'para', resourceId);
+
+    const resp =
+      resourceType === 'local'
+        ? await reviewsApi.createForLocal(resourceId, body)
+        : await reviewsApi.createForService(resourceId, body);
+
+    console.log('[useReviews] resposta POST:', resp);
+
+    if (resp.error) {
+      setError(resp.error);
+      return false;
+    }
+
+    // Inserir review criada imediatamente (optimistic)
+    if (resp.data) {
+      const created = ((resp.data as any).review ?? resp.data) as Review;
+      if ((created as any)?.id) {
+        setReviews(prev => [created, ...prev]);
+      }
+    }
+
+    // Recarregar do backend para confirmar
+    reload();
+    return true;
   };
 
-  // Mark/Unmark helpful (toggle usando apenas POST - API faz toggle automático)
+  // ── marcar como útil ─────────────────────────────────────────────────────────
   const markHelpful = async (id: string): Promise<void> => {
-    try {
-      const review = reviews.find((r) => r.id === id);
-      if (!review) return;
+    const review = reviews.find(r => r.id === id);
+    if (!review) return;
 
-      const wasHelpful = review.hasMarkedHelpful || false;
-      const wasUnhelpful = review.hasMarkedUnhelpful || false;
+    const wasHelpful = review.hasMarkedHelpful ?? false;
 
-      // Otimistic update - toggle helpful e remover unhelpful se existir
-      setReviews((prev) =>
-        prev.map((r) =>
-          r.id === id
-            ? {
-                ...r,
-                hasMarkedHelpful: !wasHelpful,
-                hasMarkedUnhelpful: false, // Remove unhelpful quando marca helpful
-                helpful: wasHelpful
-                  ? Math.max(0, (r.helpful || 1) - 1)
-                  : (r.helpful || 0) + 1,
-                unhelpful: wasUnhelpful
-                  ? Math.max(0, (r.unhelpful || 1) - 1)
-                  : (r.unhelpful || 0),
-              }
-            : r
-        )
-      );
+    // Optimistic update
+    setReviews(prev => prev.map(r =>
+      r.id === id
+        ? { ...r, hasMarkedHelpful: !wasHelpful, helpful: wasHelpful ? Math.max(0, (r.helpful || 1) - 1) : (r.helpful || 0) + 1 }
+        : r
+    ));
 
-      // API call - apenas POST (backend faz toggle automático)
-      try {
-        const response = await reviewsApi.markHelpful(id);
-
-        if (response.error) {
-          // 404 = endpoint helpful não suportado para este tipo de review (ex: serviços)
-          // Manter o estado optimista local — não reverter, não mostrar erro
-          if (response.error.includes('404')) {
-            console.warn(`[markHelpful] Endpoint não suportado para review ${id} (provável review de serviço). Estado local mantido.`);
-            return;
-          }
-
-          // Rollback para outros erros
-          setReviews((prev) =>
-            prev.map((r) =>
-              r.id === id
-                ? {
-                    ...r,
-                    hasMarkedHelpful: wasHelpful,
-                    hasMarkedUnhelpful: wasUnhelpful,
-                    helpful: wasHelpful
-                      ? (r.helpful || 0) + 1
-                      : Math.max(0, (r.helpful || 1) - 1),
-                    unhelpful: wasUnhelpful
-                      ? (r.unhelpful || 0) + 1
-                      : (r.unhelpful || 0),
-                  }
-                : r
-            )
-          );
-
-          if (response.error.includes('401')) {
-            setError('Precisas de fazer login para marcar como útil');
-          } else if (response.error.includes('403')) {
-            setError('Não tens permissão para esta ação');
-          } else {
-            setError('Erro ao registar voto. Tenta novamente.');
-          }
-          return;
-        }
-
-        // Sucesso: Atualizar com dados da API se disponíveis
-        if (response.data && 'helpfulCount' in response.data) {
-          setReviews((prev) =>
-            prev.map((r) =>
-              r.id === id
-                ? {
-                    ...r,
-                    helpful: (response.data as any).helpfulCount,
-                  }
-                : r
-            )
-          );
-        }
-
-      } catch (apiError) {
-        // API call falhou completamente
-        setReviews((prev) =>
-          prev.map((r) =>
-            r.id === id
-              ? {
-                  ...r,
-                  hasMarkedHelpful: wasHelpful,
-                  hasMarkedUnhelpful: wasUnhelpful,
-                  helpful: wasHelpful
-                    ? (r.helpful || 0) + 1
-                    : Math.max(0, (r.helpful || 1) - 1),
-                  unhelpful: wasUnhelpful
-                    ? (r.unhelpful || 0) + 1
-                    : (r.unhelpful || 0),
-                }
-              : r
-          )
-        );
-        setError('Erro de conexão. Verifica a tua internet.');
-        console.warn('[markHelpful] Erro de rede:', apiError);
-      }
-
-    } catch (err) {
-      setError('Erro inesperado ao registar voto');
-      console.error('Unexpected error in markHelpful:', err);
-      await loadReviews(); // Full rollback
+    const resp = await reviewsApi.markHelpful(id);
+    if (resp.error) {
+      // Rollback
+      setReviews(prev => prev.map(r =>
+        r.id === id
+          ? { ...r, hasMarkedHelpful: wasHelpful, helpful: wasHelpful ? (r.helpful || 0) + 1 : Math.max(0, (r.helpful || 1) - 1) }
+          : r
+      ));
+      if (!resp.error.includes('404')) setError(resp.error);
     }
   };
 
-  // Mark/Unmark unhelpful (apenas estado local - backend não suporta)
-  const markUnhelpful = async (id: string): Promise<void> => {
-    try {
-      const review = reviews.find((r) => r.id === id);
-      if (!review) return;
-
-      const wasHelpful = review.hasMarkedHelpful || false;
-      const wasUnhelpful = review.hasMarkedUnhelpful || false;
-
-      // Se estava marcado como helpful, remove primeiro
-      if (wasHelpful) {
-        // Chama markHelpful para desmarcar (usa toggle da API)
-        await markHelpful(id);
-        // Aguarda um pouco para o state atualizar
-        setTimeout(() => {
-          // Agora marca como unhelpful localmente
-          setReviews((prev) =>
-            prev.map((r) =>
-              r.id === id
-                ? {
-                    ...r,
-                    hasMarkedUnhelpful: !wasUnhelpful,
-                    unhelpful: wasUnhelpful
-                      ? Math.max(0, (r.unhelpful || 1) - 1)
-                      : (r.unhelpful || 0) + 1,
-                  }
-                : r
-            )
-          );
-        }, 100);
-        return;
-      }
-
-      // Otimistic update - toggle unhelpful apenas
-      setReviews((prev) =>
-        prev.map((r) =>
-          r.id === id
-            ? {
-                ...r,
-                hasMarkedUnhelpful: !wasUnhelpful,
-                unhelpful: wasUnhelpful
-                  ? Math.max(0, (r.unhelpful || 1) - 1)
-                  : (r.unhelpful || 0) + 1,
-              }
-            : r
-        )
-      );
-
-      console.log(`Unhelpful ${wasUnhelpful ? 'removed' : 'marked'} for review ${id} (local only)`);
-
-    } catch (err) {
-      setError('Erro ao registar voto inútil');
-      console.error('Error in markUnhelpful:', err);
-    }
-  };
-
-  // Report review
-  const reportReview = async (id: string, reason: string): Promise<void> => {
-    try {
-      const response = await reviewsApi.report(id, reason);
-      if (response.error) {
-        setError(response.error);
-        return;
-      }
-      alert('Denúncia enviada com sucesso');
-    } catch (err) {
-      setError('Erro ao enviar denúncia');
-      console.error(err);
-    }
-  };
-
-  // Clear error
   const clearError = () => setError(null);
 
-  // Load on mount and when deps change
-  useEffect(() => {
-    loadReviews();
-  }, [loadReviews]);
-
-  return {
-    reviews,
-    loading,
-    error,
-    currentPage,
-    totalPages,
-    sortBy,
-    setSortBy,
-    setCurrentPage,
-    loadReviews,
-    createReview,
-    markHelpful,
-    markUnhelpful,
-    reportReview,
-    clearError,
-  };
+  return { reviews, loading, error, rawDebug, reload, createReview, markHelpful, clearError };
 }

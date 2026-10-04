@@ -1,17 +1,20 @@
-﻿import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { PLACEHOLDER_IMAGE } from '@/utils/dataValidation';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useScrollTop } from '@/hooks/useScrollTop';
+import { useTheme } from '@/context/ThemeContext';
 import {
   ChevronLeft, Heart, MessageCircle, Share2, Bookmark,
-  MapPin, ChevronLeft as Prev, ChevronRight as Next,
-  Navigation, Flag, X, Loader2,
+  MapPin, Flag, X, Loader2,
 } from 'lucide-react';
+import GalleryCarousel from '@/components/GalleryCarousel';
+import ImageCarousel from '@/components/ImageCarousel';
 import Comments from '@/components/Comments';
 import LocationCard from '@/components/shared/LocationCard';
 import { fromApi, hasLocation } from '@/utils/normalizeLocation';
 import { postsApi } from '@/services/api';
 import { useAuth } from '@/context/AuthContext';
+
 
 interface Post {
   id: string;
@@ -31,7 +34,6 @@ interface Post {
   local_address?: string;
   local_lat?: string;
   local_lng?: string;
-  // Campos de localização detalhados
   location?: {
     latitude?: number;
     longitude?: number;
@@ -59,27 +61,38 @@ interface PostDetailProps {
   onAuthorPress?: (author: Post['author']) => void;
 }
 
-const categoryConfig: Record<string, { label: string; emoji: string; color: string; bg: string }> = {
-  praias:      { label: 'Praias',      emoji: 'ðŸ–ï¸', color: 'text-sky-600',    bg: 'bg-sky-50'    },
-  cultura:     { label: 'Cultura',     emoji: 'ðŸ›ï¸', color: 'text-amber-600',  bg: 'bg-amber-50'  },
-  gastronomia: { label: 'Gastronomia', emoji: 'ðŸ½ï¸', color: 'text-orange-600', bg: 'bg-orange-50' },
-  aventura:    { label: 'Aventura',    emoji: 'ðŸ„', color: 'text-emerald-600', bg: 'bg-emerald-50'},
-  natureza:    { label: 'Natureza',    emoji: '🌿', color: 'text-green-600',   bg: 'bg-green-50'  },
+const typeColors: Record<string, string> = {
+  guide: '#F4821F', traveler: '#2BB5C8', resident: '#1B5E3B', business: '#7B5EA7',
 };
-
+const typeBg: Record<string, string> = {
+  guide: '#FFF3E0', traveler: '#E0F7FA', resident: '#EEF7F0', business: '#F3E8FF',
+};
 const typeLabels: Record<string, string> = {
-  guide: 'Guia Turístico', traveler: 'Viajante',
-  resident: 'Morador Local', business: 'Negócio',
+  guide: 'Guia', traveler: 'Viajante', resident: 'Residente', business: 'Neg�cio',
 };
 
 export default function PostDetail({
-  post, onBack, onLike, onSave, onShare, onAuthorPress }: PostDetailProps) {
+  post, onBack, onLike, onSave, onShare, onAuthorPress,
+}: PostDetailProps) {
   useScrollTop();
   const { user } = useAuth();
-  const [currentImage, setCurrentImage] = useState(0);
+  const { isDark } = useTheme();
+  const dm = {
+    bg:      isDark ? '#0F1117' : '#F5F5F0',
+    surface: isDark ? '#1A1D27' : '#ffffff',
+    border:  isDark ? 'rgba(255,255,255,0.07)' : '#F3F4F6',
+    text:    isDark ? '#F0F4FF' : '#1A1A1A',
+    text2:   isDark ? '#A8B4CC' : '#374151',
+    text3:   isDark ? '#6B7A99' : '#9CA3AF',
+    input:   isDark ? '#22263A' : '#ffffff',
+    inputBorder: isDark ? 'rgba(255,255,255,0.1)' : '#E5E7EB',
+    reportBg:  isDark ? '#22263A' : '#F9FAFB',
+    skel:    isDark ? '#22263A' : '#E5E7EB',
+  };
+  const [galleryPaused, setGalleryPaused] = useState(false);
   const [showComments, setShowComments] = useState(false);
 
-  // Like state — inicializado com o que vem do post
+  // Like state
   const [isLiked, setIsLiked]       = useState(post.is_liked);
   const [likesCount, setLikesCount] = useState(post.likes_count);
   const [isLiking, setIsLiking]     = useState(false);
@@ -90,33 +103,30 @@ export default function PostDetail({
   const [isSaving, setIsSaving]     = useState(false);
 
   // Report state
-  const [showReport, setShowReport]   = useState(false);
-  const [reportReason, setReportReason] = useState('spam');
+  const [showReport, setShowReport]       = useState(false);
+  const [reportReason, setReportReason]   = useState('spam');
   const [reportDetails, setReportDetails] = useState('');
-  const [isReporting, setIsReporting] = useState(false);
-  const [reportDone, setReportDone]   = useState(false);
+  const [isReporting, setIsReporting]     = useState(false);
+  const [reportDone, setReportDone]       = useState(false);
 
-  // ── POST/DELETE /api/posts/{id}/like/ ──────────────────────────────────────
+  // -- POST/DELETE /api/posts/{id}/like/ ------------------------------------
   const handleLike = async () => {
     if (isLiking) return;
-    // Optimistic update
     const prev = isLiked;
     setIsLiked(!prev);
     setLikesCount(n => prev ? Math.max(0, n - 1) : n + 1);
     setIsLiking(true);
     try {
       const { data, error } = prev
-        ? await postsApi.unlike(post.id)   // DELETE /api/posts/{id}/like/
-        : await postsApi.like(post.id);    // POST   /api/posts/{id}/like/
+        ? await postsApi.unlike(post.id)
+        : await postsApi.like(post.id);
       if (error || !data) {
-        // Reverter
         setIsLiked(prev);
         setLikesCount(n => prev ? n + 1 : Math.max(0, n - 1));
       } else {
-        // Confirmar com valores reais
         setIsLiked(data.hasLiked);
         setLikesCount(data.likesCount);
-        onLike?.(post.id); // notifica o pai se necessário
+        onLike?.(post.id);
       }
     } catch {
       setIsLiked(prev);
@@ -126,7 +136,7 @@ export default function PostDetail({
     }
   };
 
-  // ── POST/DELETE /api/posts/{id}/save/ ──────────────────────────────────────
+  // -- POST/DELETE /api/posts/{id}/save/ ------------------------------------
   const handleSave = async () => {
     if (isSaving) return;
     const prev = isSaved;
@@ -152,7 +162,7 @@ export default function PostDetail({
     }
   };
 
-  // ── POST /api/posts/{id}/report/ ───────────────────────────────────────────
+  // -- POST /api/posts/{id}/report/ -----------------------------------------
   const handleReport = async () => {
     if (isReporting || !reportReason) return;
     setIsReporting(true);
@@ -171,283 +181,311 @@ export default function PostDetail({
     }
   };
 
-  const images = post.images?.length ? post.images.slice(0, 5)
-    : post.image ? [post.image] : [];
+  // Usa a lista completa devolvida pela API � at� 10 imagens, sem truncar.
+  // Mesmo padr�o de HeritageDetail (m�dulo Cultura): images[] ? ImageCarousel.
+  const images = post.images?.length
+    ? post.images.slice(0, 10)           // respeita o limite m�ximo do schema (10)
+    : post.image
+      ? [post.image]
+      : [PLACEHOLDER_IMAGE];
 
-  const cat = categoryConfig[post.local_category || ''];
+  const authorColor = typeColors[post.author.type] || '#6B7280';
 
   return (
     <>
-    <motion.div
-      className="min-h-screen bg-[#f8fafc] pb-28"
-      initial={{ opacity: 0, y: 40 }}
-      animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0, y: 40 }}
-      transition={{ duration: 0.2, ease: 'easeOut' }}
-    >
-      {/* ── Hero ─────────────────────────────────────────── */}
-      <div className="relative w-full bg-gray-900" style={{ height: '70vh', maxHeight: 500, minHeight: 300 }}>
-        <AnimatePresence mode="wait">
-          <motion.img
-            key={currentImage}
-            src={images[currentImage] || PLACEHOLDER_IMAGE}
-            alt="foto"
-            className="absolute inset-0 w-full h-full object-contain"
-            initial={{ opacity: 0, scale: 1.04 }}
-            animate={{ opacity: 1, scale: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.35 }}
-          />
-        </AnimatePresence>
+      <motion.div
+        className="pb-16"
+        style={{ background: dm.bg, fontFamily: 'Nunito, sans-serif' }}
+        initial={{ opacity: 0, y: 10 }}
+        animate={{ opacity: 1, y: 0 }}
+        exit={{ opacity: 0, y: 6 }}
+        transition={{ duration: 0.2, ease: 'easeOut' }}
+      >
+        {/* CONTE�DO � galeria + grid dentro do mesmo container */}
+        <div className="max-w-5xl mx-auto md:grid md:grid-cols-2 md:gap-6 md:px-6 md:pt-6 px-4 pt-3 space-y-3 md:space-y-0">
 
-        {/* dark gradient bottom */}
-        <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/10 to-transparent" />
-
-        {/* top bar */}
-        <div className="absolute top-0 left-0 right-0 flex items-center justify-between px-4 pt-10 pb-3">
-          <motion.button
-            whileTap={{ scale: 0.88 }}
-            onClick={onBack}
-            className="w-9 h-9 rounded-full bg-black/30 backdrop-blur-md flex items-center justify-center border border-white/20"
+          {/* GALERIA � ocupa as 2 colunas */}
+          <div
+            className="md:col-span-2 -mx-4 md:mx-0"
           >
-            <ChevronLeft size={20} className="text-white" />
-          </motion.button>
+            <div
+              className="relative w-full overflow-hidden md:rounded-2xl"
+              style={{ height: 'clamp(270px, 30vw, 370px)' }}
+            >
+              <GalleryCarousel
+                images={images}
+                alt={post.local_name || 'Publica��o'}
+              >
+                {/* Top bar � z-30 para ficar acima dos bot�es do carousel (z-20) */}
+                <div className="absolute top-0 left-0 right-0 px-4 pt-5 flex items-center justify-between" style={{ zIndex: 3 }}>
+                  <button
+                    onClick={onBack}
+                    className="w-9 h-9 rounded-full flex items-center justify-center"
+                    style={{ background: 'rgba(0,0,0,0.35)', backdropFilter: 'blur(8px)' }}
+                  >
+                    <ChevronLeft size={20} className="text-white" strokeWidth={2.5} />
+                  </button>
+                  <div className="flex items-center gap-2">
+                    <motion.button
+                      whileTap={{ scale: 0.9 }}
+                      onClick={() => onShare?.(post.id)}
+                      className="w-9 h-9 rounded-full flex items-center justify-center"
+                      style={{ background: 'rgba(0,0,0,0.35)', backdropFilter: 'blur(8px)' }}
+                    >
+                      <Share2 size={16} className="text-white" strokeWidth={2} />
+                    </motion.button>
+                    <motion.button
+                      whileTap={{ scale: 0.9 }}
+                      onClick={handleLike}
+                      disabled={isLiking}
+                      className="w-9 h-9 rounded-full flex items-center justify-center"
+                      style={{
+                        background: isLiked ? '#F87171' : 'rgba(0,0,0,0.35)',
+                        backdropFilter: 'blur(8px)',
+                      }}
+                    >
+                      <Heart size={16} fill={isLiked ? 'white' : 'none'} className="text-white" strokeWidth={2} />
+                    </motion.button>
+                  </div>
+                </div>
 
-          <motion.button
-            whileTap={{ scale: 0.88 }}
-            onClick={handleSave}
-            disabled={isSaving}
-            className="w-9 h-9 rounded-full bg-black/30 backdrop-blur-md flex items-center justify-center border border-white/20"
-          >
-            <Bookmark size={18} className={isSaved ? 'text-[#0077B6] fill-[#0077B6]' : 'text-white'} fill={isSaved ? 'currentColor' : 'none'} />
-          </motion.button>
-        </div>
-
-        {/* carousel arrows */}
-        {images.length > 1 && (
-          <>
-            <button onClick={() => setCurrentImage(i => (i === 0 ? images.length - 1 : i - 1))}
-              className="absolute left-3 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-black/30 backdrop-blur-sm flex items-center justify-center">
-              <Prev size={16} className="text-white" />
-            </button>
-            <button onClick={() => setCurrentImage(i => (i === images.length - 1 ? 0 : i + 1))}
-              className="absolute right-3 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-black/30 backdrop-blur-sm flex items-center justify-center">
-              <Next size={16} className="text-white" />
-            </button>
-          </>
-        )}
-
-        {/* dots */}
-        {images.length > 1 && (
-          <div className="absolute bottom-14 left-0 right-0 flex justify-center gap-1.5">
-            {images.map((_, i) => (
-              <button key={i} onClick={() => setCurrentImage(i)}
-                className={`rounded-full transition-all duration-300 ${i === currentImage ? 'w-5 h-1.5 bg-white' : 'w-1.5 h-1.5 bg-white/40'}`} />
-            ))}
+                {/* Bottom info � z-30 */}
+                <div className="absolute bottom-0 left-0 right-0 px-4 pb-4" style={{ zIndex: 3 }}>
+                  <div className="flex items-end justify-between">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      {(post.location?.province || post.province) && (
+                        <div className="flex items-center gap-1">
+                          <MapPin size={12} className="text-white/70" />
+                          <span className="text-white/80 text-xs">{post.location?.province || post.province}</span>
+                        </div>
+                      )}
+                      {post.local_name && (
+                        <>
+                          <span className="text-white/40">�</span>
+                          <span className="text-white/80 text-xs">{post.local_name}</span>
+                        </>
+                      )}
+                    </div>
+                    <div
+                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-full"
+                      style={{ background: 'rgba(0,0,0,0.35)', backdropFilter: 'blur(8px)' }}
+                    >
+                      <Heart size={11} fill={isLiked ? '#F87171' : 'none'} stroke={isLiked ? '#F87171' : 'white'} />
+                      <span className="text-white text-[11px] font-bold">{likesCount}</span>
+                    </div>
+                  </div>
+                </div>
+              </GalleryCarousel>
+            </div>
           </div>
-        )}
 
-        {/* author pill — bottom of hero */}
-        <div className="absolute bottom-4 left-4 right-4 flex items-center justify-between">
-          <motion.button
-            whileTap={{ scale: 0.95 }}
-            onClick={() => onAuthorPress?.(post.author)}
-            className="flex items-center gap-2 bg-black/30 backdrop-blur-md rounded-full px-3 py-1.5 border border-white/15 active:bg-black/50 transition-colors"
-          >
-            <div className="w-6 h-6 rounded-full bg-gradient-to-br from-[#0077B6] to-[#2D6A4F] flex items-center justify-center flex-shrink-0">
-              {post.author.avatar
-                ? <img src={post.author.avatar} className="w-full h-full object-cover rounded-full" alt="" />
-                : <span className="text-[10px] font-bold text-white">{post.author.name.charAt(0)}</span>}
-            </div>
-            <div className="text-left">
-              <p className="text-white text-xs font-semibold leading-tight">{post.author.name}</p>
-              <p className="text-white/60 text-[10px]">{typeLabels[post.author.type]}</p>
-            </div>
-          </motion.button>
+          {/* Coluna esquerda */}
+          <div className="space-y-3">
 
-          <div className="flex flex-col items-end gap-1.5">
-            {post.local_name && (
-              <div className="flex items-center bg-black/30 backdrop-blur-md rounded-full px-3 py-1.5 border border-white/15">
-                <span className="text-white text-xs font-semibold">{post.local_name}</span>
+            {/* Autor */}
+            <div className="flex items-center justify-between">
+              <motion.button
+                whileTap={{ scale: 0.97 }}
+                onClick={() => onAuthorPress?.(post.author)}
+                className="flex items-center gap-2"
+              >
+                <div
+                  className="w-7 h-7 rounded-full flex items-center justify-center text-white text-xs font-black flex-shrink-0 overflow-hidden"
+                  style={{ background: `linear-gradient(135deg, ${authorColor}, #2BB5C8)` }}
+                >
+                  {post.author.avatar
+                    ? <img src={post.author.avatar} alt={post.author.name} className="w-full h-full object-cover" />
+                    : post.author.name.charAt(0).toUpperCase()}
+                </div>
+                <p className="text-xs font-black" style={{ color: dm.text }}>{post.author.name}</p>
+              </motion.button>
+              <span
+                className="text-[9px] font-bold px-2 py-0.5 rounded-full"
+                style={{ background: typeBg[post.author.type] || '#F3F4F6', color: authorColor }}
+              >
+                {typeLabels[post.author.type] || post.author.type}
+              </span>
+            </div>
+
+            {/* Descri��o */}
+            <div className="rounded-2xl p-3.5 shadow-sm text-left space-y-3"
+              style={{ background: dm.surface }}>
+              <h2 className="text-xs font-black" style={{ color: dm.text }}>Publica��o</h2>
+              <div className="pt-2 border-t" style={{ borderColor: dm.border }}>
+                <p className="text-sm leading-relaxed text-justify" style={{ color: dm.text2 }}>
+                  {post.description}
+                </p>
+              </div>
+            </div>
+
+            {/* Ac��es sociais */}
+            <div className="rounded-2xl shadow-sm overflow-hidden"
+              style={{ background: dm.surface, border: `1px solid ${dm.border}` }}>
+              <div className="flex items-center divide-x" style={{ '--tw-divide-opacity': 1 } as any}>
+                {/* Gosto */}
+                <motion.button
+                  whileTap={{ scale: 0.88 }}
+                  onClick={handleLike}
+                  disabled={isLiking}
+                  className="flex-1 flex flex-col items-center gap-0.5 py-3"
+                >
+                  <Heart
+                    size={19}
+                    fill={isLiked ? '#F87171' : 'none'}
+                    stroke={isLiked ? '#F87171' : '#9CA3AF'}
+                    strokeWidth={2}
+                  />
+                  <span className="text-[10px] font-semibold" style={{ color: isLiked ? '#F87171' : '#9CA3AF' }}>
+                    {likesCount}
+                  </span>
+                </motion.button>
+
+                {/* Comentar */}
+                <motion.button
+                  whileTap={{ scale: 0.88 }}
+                  onClick={() => setShowComments(!showComments)}
+                  className="flex-1 flex flex-col items-center gap-0.5 py-3"
+                >
+                  <MessageCircle
+                    size={19}
+                    fill={showComments ? '#2BB5C8' : 'none'}
+                    stroke={showComments ? '#2BB5C8' : '#9CA3AF'}
+                    strokeWidth={2}
+                  />
+                  <span
+                    className="text-[10px] font-semibold"
+                    style={{ color: showComments ? '#2BB5C8' : '#9CA3AF' }}
+                  >
+                    {post.comments_count}
+                  </span>
+                </motion.button>
+
+                {/* Partilhar */}
+                <motion.button
+                  whileTap={{ scale: 0.88 }}
+                  onClick={() => onShare?.(post.id)}
+                  className="flex-1 flex flex-col items-center gap-0.5 py-3"
+                >
+                  <Share2 size={19} stroke="#9CA3AF" strokeWidth={2} />
+                  <span className="text-[10px] font-semibold" style={{ color: '#9CA3AF' }}>
+                    {post.shares_count}
+                  </span>
+                </motion.button>
+
+                {/* Guardar */}
+                <motion.button
+                  whileTap={{ scale: 0.88 }}
+                  onClick={handleSave}
+                  disabled={isSaving}
+                  className="flex-1 flex flex-col items-center gap-0.5 py-3"
+                >
+                  <Bookmark
+                    size={19}
+                    fill={isSaved ? '#0EA5E9' : 'none'}
+                    stroke={isSaved ? '#0EA5E9' : '#9CA3AF'}
+                    strokeWidth={2}
+                  />
+                  <span
+                    className="text-[10px] font-semibold"
+                    style={{ color: isSaved ? '#0EA5E9' : '#9CA3AF' }}
+                  >
+                    {savesCount}
+                  </span>
+                </motion.button>
+
+                {/* Reportar */}
+                <motion.button
+                  whileTap={{ scale: 0.88 }}
+                  onClick={() => setShowReport(true)}
+                  className="flex-1 flex flex-col items-center gap-0.5 py-3"
+                >
+                  <Flag size={19} stroke="#9CA3AF" strokeWidth={2} />
+                  <span className="text-[10px] font-semibold" style={{ color: '#9CA3AF' }}>
+                    Reportar
+                  </span>
+                </motion.button>
+              </div>
+            </div>
+
+            {/* Coment�rios � colaps�vel */}
+            <AnimatePresence>
+              {showComments && (
+                <motion.div
+                  initial={{ opacity: 0, height: 0 }}
+                  animate={{ opacity: 1, height: 'auto' }}
+                  exit={{ opacity: 0, height: 0 }}
+                  transition={{ duration: 0.2, ease: 'easeOut' }}
+                  className="overflow-hidden"
+                >
+                  <Comments postId={post.id} commentsCount={post.comments_count} />
+                </motion.div>
+              )}
+            </AnimatePresence>
+
+            {/* Localiza��o */}
+            {(() => {
+              const loc = fromApi(post);
+              return hasLocation(loc) ? (
+                <LocationCard
+                  data={loc}
+                  showMap={!!(post.local_lat && post.local_lng)}
+                  publicationName={post.local_name}
+                />
+              ) : null;
+            })()}
+
+          </div>
+
+          {/* Coluna direita */}
+          <div className="space-y-3">
+
+            {/* Coment�rios expandidos */}
+            <div className="rounded-2xl shadow-sm overflow-hidden"
+              style={{ background: dm.surface, border: `1px solid ${dm.border}` }}>
+              <div className="px-3.5 py-2.5"
+                style={{ borderBottom: `1px solid ${dm.border}`, background: isDark ? '#22263A' : '#FAFAFA' }}>
+                <h2 className="text-xs font-black" style={{ color: dm.text }}>Coment�rios</h2>
+              </div>
+              <div className="px-3.5 py-3">
+                <Comments postId={post.id} commentsCount={post.comments_count} />
+              </div>
+            </div>
+
+            {/* Como chegar */}
+            {(post.local_lat && post.local_lng) && (
+              <div
+                className="rounded-2xl p-4"
+                style={{ background: 'linear-gradient(135deg, #1B5E3B 0%, #2BB5C8 100%)' }}
+              >
+                <p className="text-white font-black text-sm mb-0.5">Quer visitar este local?</p>
+                <p className="text-white/75 text-xs mb-3 leading-snug">
+                  Clica para ver a rota at� l�.
+                </p>
+                <motion.button
+                  whileTap={{ scale: 0.97 }}
+                  animate={{ y: [0, -5, 0] }}
+                  transition={{ repeat: Infinity, duration: 1.8, ease: 'easeInOut' }}
+                  onClick={() => {
+                    const url = `https://www.google.com/maps/dir/?api=1&destination=${post.local_lat},${post.local_lng}`;
+                    window.open(url, '_blank');
+                  }}
+                  className="flex items-center gap-1.5 px-4 py-2 rounded-xl font-black text-xs"
+                  style={{ background: 'white', color: '#1B5E3B' }}
+                >
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z"/>
+                    <circle cx="12" cy="9" r="2.5"/>
+                  </svg>
+                  Como chegar
+                </motion.button>
               </div>
             )}
+
           </div>
         </div>
-      </div>
+      </motion.div>
 
-      {/* ── Thumbnail strip ────────────────────── */}
-      {images.length > 1 && (
-        <div className="flex items-center px-4 py-3 bg-white border-b border-gray-100 gap-3">
-          {/* Thumbnails */}
-          <div className="flex gap-2 overflow-x-auto scrollbar-hide flex-1">
-            {images.map((img, i) => (
-              <motion.button key={i} onClick={() => setCurrentImage(i)} whileTap={{ scale: 0.93 }}
-                className={`flex-shrink-0 w-16 h-16 rounded-xl overflow-hidden border-2 transition-all ${i === currentImage ? 'border-[#0077B6] shadow-md' : 'border-transparent opacity-60'}`}>
-                <img src={img} alt="" className="w-full h-full object-cover" />
-              </motion.button>
-            ))}
-            <div className="flex-shrink-0 w-16 h-16 rounded-xl border-2 border-dashed border-gray-200 flex items-center justify-center text-[10px] text-gray-400 font-semibold">
-              {images.length}/5
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* ── Action bar (simplified) ───────────────────────────────────── */}
-      <div className="flex items-center bg-white border-b border-gray-100 px-2">
-        {/* Like */}
-        <motion.button whileTap={{ scale: 0.88 }} onClick={handleLike} disabled={isLiking}
-          className={`flex-1 flex flex-col items-center gap-0.5 py-3 rounded-xl transition-colors ${isLiked ? 'text-red-500 bg-red-50' : 'text-gray-400'}`}>
-          <Heart size={20} fill={isLiked ? 'currentColor' : 'none'} />
-          <span className="text-[10px] font-semibold">Gosto</span>
-        </motion.button>
-
-        {/* Comentários */}
-        <motion.button whileTap={{ scale: 0.88 }} onClick={() => setShowComments(!showComments)}
-          className={`flex-1 flex flex-col items-center gap-0.5 py-3 rounded-xl transition-colors ${showComments ? 'text-blue-600 bg-blue-50' : 'text-gray-400'}`}>
-          <MessageCircle size={20} fill={showComments ? 'currentColor' : 'none'} />
-          <span className="text-[10px] font-semibold">Comentar</span>
-        </motion.button>
-
-        {/* Partilhar */}
-        <motion.button whileTap={{ scale: 0.88 }} onClick={() => onShare?.(post.id)}
-          className="flex-1 flex flex-col items-center gap-0.5 py-3 rounded-xl transition-colors text-gray-400">
-          <Share2 size={20} />
-          <span className="text-[10px] font-semibold">Partilhar</span>
-        </motion.button>
-
-        {/* Guardar */}
-        <motion.button whileTap={{ scale: 0.88 }} onClick={handleSave} disabled={isSaving}
-          className={`flex-1 flex flex-col items-center gap-0.5 py-3 rounded-xl transition-colors ${isSaved ? 'text-[#0077B6] bg-blue-50' : 'text-gray-400'}`}>
-          <Bookmark size={20} fill={isSaved ? 'currentColor' : 'none'} />
-          <span className="text-[10px] font-semibold">Guardar</span>
-        </motion.button>
-
-        {/* Denunciar */}
-        <motion.button whileTap={{ scale: 0.88 }} onClick={() => setShowReport(true)}
-          className="flex-1 flex flex-col items-center gap-0.5 py-3 rounded-xl transition-colors text-gray-400 hover:text-amber-500">
-          <Flag size={20} />
-          <span className="text-[10px] font-semibold">Reportar</span>
-        </motion.button>
-      </div>
-
-      {/* ── Comments Section ──────────────────────────────── */}
-      <AnimatePresence>
-        {showComments && (
-          <motion.div
-            initial={{ opacity: 0, height: 0 }}
-            animate={{ opacity: 1, height: 'auto' }}
-            exit={{ opacity: 0, height: 0 }}
-            transition={{ duration: 0.2, ease: 'easeOut' }}
-            className="overflow-hidden"
-          >
-            <Comments postId={post.id} commentsCount={post.comments_count} />
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* ── Body ─────────────────────────────────────────── */}
-      <div className="px-4 pt-5 space-y-4">
-
-        {/* Description */}
-        <p className="text-gray-800 text-sm leading-relaxed">{post.description}</p>
-
-        {/* Suggested Services Section */}
-        <div className="bg-white rounded-2xl shadow-sm overflow-hidden border border-gray-100">
-          <div className="px-4 py-3 border-b border-gray-100 bg-gradient-to-r from-blue-50 to-emerald-50">
-            <h3 className="text-sm font-bold text-gray-900 flex items-center gap-2">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
-                <polyline points="9 22 9 12 15 12 15 22"/>
-              </svg>
-              Serviços Recomendados
-            </h3>
-            <p className="text-xs text-gray-500 mt-0.5">
-              {post.local_address ? `Próximos a ${post.local_address.split(',')[0]}` : 'Na sua região'}
-            </p>
-          </div>
-          
-          <div className="p-4">
-            {/* Empty State */}
-            <div className="text-center py-8">
-              <div className="w-16 h-16 mx-auto mb-3 rounded-full bg-gray-100 flex items-center justify-center">
-                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-gray-400">
-                  <circle cx="11" cy="11" r="8"/>
-                  <path d="m21 21-4.35-4.35"/>
-                </svg>
-              </div>
-              <p className="text-sm font-semibold text-gray-700 mb-1">
-                Sem serviços publicados
-              </p>
-              <p className="text-xs text-gray-500 mb-4">
-                Explore por província ou distrito
-              </p>
-              <motion.button
-                whileTap={{ scale: 0.95 }}
-                className="inline-flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-[#0077B6] to-[#2D6A4F] text-white text-xs font-semibold rounded-full shadow-sm"
-              >
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <polygon points="3 6 9 3 15 6 21 3 21 18 15 21 9 18 3 21"/>
-                  <line x1="9" y1="3" x2="9" y2="18"/>
-                  <line x1="15" y1="6" x2="15" y2="21"/>
-                </svg>
-                Explorar Serviços
-              </motion.button>
-            </div>
-          </div>
-        </div>
-
-        {/* Localização — hierarquia completa via modelo canónico */}
-        {(() => {
-          const loc = fromApi(post);
-          return hasLocation(loc) ? (
-            <LocationCard
-              data={loc}
-              showMap={!!(post.local_lat && post.local_lng)}
-              publicationName={post.local_name}
-            />
-          ) : null;
-        })()}
-
-        {/* Map preview */}
-        {post.local_lat && post.local_lng && (
-          <div className="bg-white rounded-2xl shadow-sm overflow-hidden">
-            {/* Map full width */}
-            <div className="h-44 relative bg-gradient-to-br from-sky-100 via-blue-50 to-emerald-100">
-              <svg className="absolute inset-0 w-full h-full opacity-20" xmlns="http://www.w3.org/2000/svg">
-                <defs>
-                  <pattern id="grid" width="24" height="24" patternUnits="userSpaceOnUse">
-                    <path d="M 24 0 L 0 0 0 24" fill="none" stroke="#0077B6" strokeWidth="0.5"/>
-                  </pattern>
-                </defs>
-                <rect width="100%" height="100%" fill="url(#grid)" />
-              </svg>
-              <div className="absolute inset-0 flex flex-col items-center justify-center">
-                <motion.div
-                  animate={{ y: [0, -6, 0] }}
-                  transition={{ duration: 2, repeat: Infinity, ease: 'easeInOut' }}
-                  className="flex flex-col items-center"
-                >
-                  <div className="w-10 h-10 rounded-full bg-[#0077B6] shadow-xl flex items-center justify-center border-3 border-white">
-                    <Navigation size={18} className="text-white" />
-                  </div>
-                  <div className="w-2 h-2 bg-[#0077B6]/30 rounded-full mt-1 blur-sm" />
-                </motion.div>
-              </div>
-              <div className="absolute bottom-2 left-0 right-0 flex justify-center">
-                <div className="bg-white/80 backdrop-blur-sm rounded-full px-2 py-0.5">
-                  <p className="text-[9px] font-bold text-gray-500">
-                    {parseFloat(post.local_lat).toFixed(3)}°, {parseFloat(post.local_lng).toFixed(3)}°
-                  </p>
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
-      </div>
-    </motion.div>
-
-      {/* ── Modal Report ─────────────────────────────────── */}
+      {/* Modal Report */}
       <AnimatePresence>
         {showReport && (
           <motion.div
@@ -463,15 +501,13 @@ export default function PostDetail({
               exit={{ y: '100%' }}
               transition={{ duration: 0.2, ease: 'easeOut' }}
               onClick={e => e.stopPropagation()}
-              className="w-full bg-white rounded-t-3xl px-5 pt-4 pb-10 space-y-4 max-w-lg"
-            >
-              {/* Handle */}
+              className="w-full rounded-t-3xl px-5 pt-4 pb-10 space-y-4 max-w-lg"
+              style={{ background: dm.surface }}>
               <div className="flex justify-center mb-1">
-                <div className="w-10 h-1 rounded-full bg-gray-200" />
+                <div className="w-10 h-1 rounded-full" style={{ background: dm.skel }} />
               </div>
-
               <div className="flex items-center justify-between">
-                <h3 className="text-base font-black text-gray-900">Denunciar publicação</h3>
+                <h3 className="text-base font-black" style={{ color: dm.text }}>Denunciar publica��o</h3>
                 <button onClick={() => setShowReport(false)}>
                   <X size={20} className="text-gray-400" />
                 </button>
@@ -480,42 +516,43 @@ export default function PostDetail({
               {reportDone ? (
                 <div className="text-center py-6">
                   <div className="w-12 h-12 rounded-full bg-green-100 flex items-center justify-center mx-auto mb-2">
-                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#16a34a" strokeWidth="2.5"><path d="M20 6L9 17l-5-5"/></svg>
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#16a34a" strokeWidth="2.5">
+                      <path d="M20 6L9 17l-5-5"/>
+                    </svg>
                   </div>
-                  <p className="text-sm font-bold text-gray-700">Denúncia enviada</p>
+                  <p className="text-sm font-bold text-gray-700">Den�ncia enviada</p>
                 </div>
               ) : (
                 <>
-                  {/* Motivo */}
                   <div className="space-y-2">
-                    <p className="text-xs font-bold text-gray-500 uppercase tracking-wide">Motivo</p>
+                    <p className="text-xs font-bold uppercase tracking-wide" style={{ color: '#94A3B8' }}>Motivo</p>
                     {(['spam', 'inappropriate', 'fake', 'copyright', 'other'] as const).map(reason => (
                       <button
                         key={reason}
                         onClick={() => setReportReason(reason)}
-                        className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-semibold transition-colors text-left ${
-                          reportReason === reason
-                            ? 'bg-red-50 text-red-600 border border-red-200'
-                            : 'bg-gray-50 text-gray-700 border border-transparent'
-                        }`}
+                        className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-semibold transition-colors text-left`}
+                        style={reportReason === reason
+                          ? { background: isDark ? 'rgba(248,113,113,0.15)' : '#FEF2F2', color: '#EF4444', border: `1px solid ${isDark ? 'rgba(248,113,113,0.3)' : '#FECACA'}` }
+                          : { background: isDark ? '#22263A' : '#F9FAFB', color: dm.text2, border: '1px solid transparent' }
+                        }
                       >
                         {reportReason === reason && (
-                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M20 6L9 17l-5-5"/></svg>
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                            <path d="M20 6L9 17l-5-5"/>
+                          </svg>
                         )}
-                        {{ spam: 'Spam', inappropriate: 'Conteúdo inapropriado', fake: 'Informação falsa', copyright: 'Violação de direitos', other: 'Outro motivo' }[reason]}
+                        {{ spam: 'Spam', inappropriate: 'Conte�do inapropriado', fake: 'Informa��o falsa', copyright: 'Viola��o de direitos', other: 'Outro motivo' }[reason]}
                       </button>
                     ))}
                   </div>
-
-                  {/* Detalhes opcionais */}
                   <textarea
                     value={reportDetails}
                     onChange={e => setReportDetails(e.target.value)}
                     placeholder="Detalhes adicionais (opcional)..."
                     rows={3}
-                    className="w-full px-4 py-3 rounded-xl border border-gray-200 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-red-200"
+                    className="w-full px-4 py-3 rounded-xl text-sm resize-none focus:outline-none"
+                    style={{ background: dm.input, border: `1px solid ${dm.inputBorder}`, color: dm.text }}
                   />
-
                   <motion.button
                     whileTap={{ scale: 0.97 }}
                     onClick={handleReport}
@@ -524,7 +561,7 @@ export default function PostDetail({
                     style={{ background: '#DC2626' }}
                   >
                     {isReporting ? <Loader2 size={16} className="animate-spin" /> : <Flag size={16} />}
-                    Enviar denúncia
+                    Enviar den�ncia
                   </motion.button>
                 </>
               )}
@@ -535,5 +572,3 @@ export default function PostDetail({
     </>
   );
 }
-
-

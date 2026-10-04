@@ -10,6 +10,7 @@
  * - Nunca descartar uma publicação aprovada pela API só por falta de imagem.
  */
 
+import { getCachedImages } from '@/utils/imageCache';
 import {
   translateLocalCategory,
   translateServiceCategory,
@@ -209,7 +210,7 @@ export interface ValidationResult<T> {
 
 /**
  * Extrai URLs de imagens de qualquer formato que a API possa devolver:
- *   - `images: string[]`               <- Posts, Locals, Services (formato normal)
+ *   - `images: string[]`               <- Posts, Locals, Services (formato normal — OpenAPI)
  *   - `images: {url: string}[]`        <- variante de objeto
  *   - `cover_image / coverImage`       <- campo único
  *   - `image / thumbnail`              <- campos alternativos
@@ -222,6 +223,9 @@ export interface ValidationResult<T> {
 export function extractImages(item: any): string[] {
   if (!item || typeof item !== 'object') return [];
 
+  const BASE_URL = (import.meta.env.VITE_API_URL as string || 'https://api-txopela-tour-3tdq.onrender.com')
+    .replace(/\/api\/?$/, '');
+
   const seen = new Set<string>();
   const result: string[] = [];
 
@@ -229,16 +233,19 @@ export function extractImages(item: any): string[] {
     if (!raw || typeof raw !== 'string') return;
     const url = raw.trim();
     if (!url) return;
-    // Rejeitar apenas placeholders gerados pelo próprio frontend
+    // Rejeitar placeholders gerados pelo frontend
     if (
       url.includes('/images/local-') ||
       url.includes('/images/service-') ||
       url.includes('placeholder.com') ||
-      url.includes('via.placeholder')
+      url.includes('via.placeholder') ||
+      url.startsWith('data:image/svg+xml') // placeholder SVG inline
     ) return;
-    if (!seen.has(url)) {
-      seen.add(url);
-      result.push(url);
+    // Resolver caminhos relativos para URL absoluta
+    const absolute = url.startsWith('http') ? url : `${BASE_URL}${url.startsWith('/') ? '' : '/'}${url}`;
+    if (!seen.has(absolute)) {
+      seen.add(absolute);
+      result.push(absolute);
     }
   };
 
@@ -251,7 +258,7 @@ export function extractImages(item: any): string[] {
     }
   };
 
-  // Prioridade 1: campo `images` (formato principal da API)
+  // Prioridade 1: campo `images` (formato principal — OpenAPI LocalDetail/ServiceDetail/PostDetail)
   if (Array.isArray(item.images)) item.images.forEach(extractFromEntry);
 
   // Prioridade 2: campos de array alternativos
@@ -264,14 +271,18 @@ export function extractImages(item: any): string[] {
   add(item.image);
   add(item.thumbnail);
 
-  // Prioridade 4: montar URL completa se o campo for caminho relativo
-  // Ex: /media/uploads/... → https://api-txopela-tour-3tdq.onrender.com/media/uploads/...
-  const BASE_URL = (import.meta.env.VITE_API_URL as string || 'https://api-txopela-tour-3tdq.onrender.com')
-    .replace(/\/api\/?$/, '');
+  // Prioridade 4: fallback para o cache local (imagens submetidas no upload mas não devolvidas pela API)
+  if (result.length === 0 && item.id) {
+    const cached = getCachedImages(String(item.id));
+    cached.forEach(url => {
+      if (!seen.has(url)) {
+        seen.add(url);
+        result.push(url);
+      }
+    });
+  }
 
-  return result.map(url =>
-    url.startsWith('http') ? url : `${BASE_URL}${url.startsWith('/') ? '' : '/'}${url}`
-  );
+  return result;
 }
 
 // ---------------------------------------------------------------------------

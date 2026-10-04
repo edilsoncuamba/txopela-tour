@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import './App.css';
 
@@ -18,6 +18,11 @@ import { AuthProvider, useAuth } from '@/context/AuthContext';
 import { AppProvider } from '@/context/AppContext';
 import { TourismProvider } from '@/context/TourismContext';
 import { FavoritesProvider } from '@/context/FavoritesContext';
+import { ThemeProvider, useTheme, AppShell } from '@/context/ThemeContext';
+import { MapProvider, useMapContext } from '@/context/MapContext';
+
+// Services
+import { postsApi } from '@/services/api';
 
 // Components
 import BottomNav from '@/components/BottomNav';
@@ -41,8 +46,11 @@ import AddLocal from '@/pages/AddLocal';
 import AddPost from '@/pages/AddPost';
 import AddService from '@/pages/AddService';
 import Map from '@/pages/Map';
+import type { PlacePin } from '@/pages/Map';
 import Profile from '@/pages/Profile';
 import LocalDetail from '@/pages/LocalDetail';
+import PostDetail from '@/pages/PostDetail';
+import DestinationDetail from '@/pages/DestinationDetail';
 import Favorites from '@/pages/Favorites';
 import Notifications from '@/pages/Notifications';
 import Chatbot from '@/pages/Chatbot';
@@ -88,9 +96,154 @@ function UnauthorizedScreen({ message, onBack }: { message: string; onBack: () =
   );
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Tela de detalhe de SERVIÇO vinda do mapa
+// ─────────────────────────────────────────────────────────────────────────────
+function MapServiceDetail({ pin, onBack }: { pin: PlacePin; onBack: () => void }) {
+  return (
+    <div className="min-h-screen overflow-y-auto" style={{ background: '#F2F2F7', fontFamily: 'Nunito, sans-serif' }}>
+      <div className="bg-white px-4 pt-5 pb-4 sticky top-0 z-10 shadow-sm flex items-center gap-3">
+        <button onClick={onBack} className="w-9 h-9 bg-gray-100 rounded-full flex items-center justify-center flex-shrink-0">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#1A1A1A" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+        </button>
+        <div className="min-w-0">
+          <p className="text-xs font-bold" style={{ color: '#0077B6' }}>Serviço</p>
+          <h1 className="text-base font-black truncate" style={{ color: '#1A1A1A' }}>{pin.name}</h1>
+        </div>
+      </div>
+      <div className="max-w-2xl mx-auto px-4 pt-4 pb-20 space-y-4">
+        {pin.image && (
+          <div className="rounded-2xl overflow-hidden shadow-md" style={{ height: 200 }}>
+            <img src={pin.image} alt={pin.name} className="w-full h-full object-cover" />
+          </div>
+        )}
+        <div className="bg-white rounded-2xl p-4 shadow-sm">
+          <div className="flex items-center gap-2 mb-3">
+            <span className="px-2 py-0.5 rounded-full text-[10px] font-black text-white" style={{ background: '#0077B6' }}>
+              {pin.category}
+            </span>
+            {pin.rating > 0 && (
+              <div className="flex items-center gap-0.5">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="#FBBF24"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>
+                <span className="text-sm font-bold" style={{ color: '#1A1A1A' }}>{pin.rating.toFixed(1)}</span>
+                <span className="text-xs" style={{ color: '#9CA3AF' }}>({pin.reviews})</span>
+              </div>
+            )}
+          </div>
+          <h2 className="text-lg font-black mb-2" style={{ color: '#1A1A1A' }}>{pin.name}</h2>
+          {pin.desc && <p className="text-sm leading-relaxed" style={{ color: '#4B5563' }}>{pin.desc}</p>}
+        </div>
+        {pin.provincia && (
+          <div className="bg-white rounded-2xl p-3 shadow-sm flex items-center gap-2">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#0077B6" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z"/><circle cx="12" cy="10" r="3"/></svg>
+            <p className="text-sm font-semibold" style={{ color: '#1A1A1A' }}>{pin.provincia}</p>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Tela de detalhe de POST vinda do mapa
+// ─────────────────────────────────────────────────────────────────────────────
+function MapPostDetail({
+  pin, postData, loading, onBack, onAuthorPress,
+}: {
+  pin: PlacePin;
+  postData: any | null;
+  loading: boolean;
+  onBack: () => void;
+  onAuthorPress: (author: { id: string; name: string; avatar?: string; type: string }) => void;
+}) {
+  const postsApiRef = useRef(postsApi);
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center" style={{ background: '#F2F2F7' }}>
+        <div className="flex flex-col items-center gap-3">
+          <div className="w-10 h-10 border-4 border-[#7B5EA7]/30 border-t-[#7B5EA7] rounded-full animate-spin" />
+          <p className="text-sm font-bold" style={{ color: '#7B5EA7' }}>A carregar publicação...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!postData) {
+    // Fallback — dados não chegaram
+    return (
+      <div className="min-h-screen overflow-y-auto" style={{ background: '#F2F2F7', fontFamily: 'Nunito, sans-serif' }}>
+        <div className="bg-white px-4 pt-5 pb-4 sticky top-0 z-10 shadow-sm flex items-center gap-3">
+          <button onClick={onBack} className="w-9 h-9 bg-gray-100 rounded-full flex items-center justify-center flex-shrink-0">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#1A1A1A" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+          </button>
+          <div className="min-w-0">
+            <p className="text-xs font-bold" style={{ color: '#7B5EA7' }}>Publicação</p>
+            <h1 className="text-base font-black truncate" style={{ color: '#1A1A1A' }}>{pin.name}</h1>
+          </div>
+        </div>
+        <div className="max-w-2xl mx-auto px-4 pt-4 pb-20 space-y-4">
+          {pin.image && (
+            <div className="rounded-2xl overflow-hidden shadow-md" style={{ height: 220 }}>
+              <img src={pin.image} alt={pin.name} className="w-full h-full object-cover" />
+            </div>
+          )}
+          <div className="bg-white rounded-2xl p-4 shadow-sm">
+            <h2 className="text-lg font-black mb-2" style={{ color: '#1A1A1A' }}>{pin.name}</h2>
+            {pin.content && <p className="text-sm leading-relaxed" style={{ color: '#4B5563' }}>{pin.content}</p>}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  const post = {
+    id:             postData.id ?? pin.id.replace('post-', ''),
+    title:          postData.title ?? pin.name,
+    description:    postData.content ?? pin.desc ?? '',
+    content:        postData.content ?? pin.desc ?? '',
+    image:          pin.image ?? undefined,
+    images:         postData.images ?? (pin.image ? [pin.image] : []),
+    likes_count:    postData.stats?.likes ?? 0,
+    comments_count: postData.stats?.comments ?? 0,
+    shares_count:   postData.stats?.shares ?? 0,
+    saves_count:    postData.stats?.saves ?? 0,
+    is_liked:       postData.userInteraction?.hasLiked ?? false,
+    is_saved:       postData.userInteraction?.hasSaved ?? false,
+    created_at:     postData.createdAt ?? '',
+    province:       postData.province ?? pin.provincia,
+    location:       postData.location ?? { latitude: pin.lat, longitude: pin.lng },
+    author: postData.author
+      ? { id: postData.author.id, name: postData.author.name, avatar: postData.author.avatar, type: postData.author.role ?? 'tourist' }
+      : pin.author
+        ? { id: pin.author.id, name: pin.author.name, avatar: pin.author.avatar, type: 'tourist' }
+        : { id: '', name: 'Anónimo', avatar: undefined, type: 'tourist' },
+  };
+
+  return (
+    <PostDetail
+      post={post}
+      onBack={onBack}
+      onLike={(id) => {
+        postsApiRef.current.like(id).catch(() => {});
+      }}
+      onSave={(id) => {
+        postsApiRef.current.save(id).catch(() => {});
+      }}
+      onShare={(id) => {
+        const url = `${window.location.origin}#post-${id}`;
+        if (navigator.share) { navigator.share({ title: post.title, text: post.description, url }).catch(() => {}); }
+        else { navigator.clipboard?.writeText(url).catch(() => {}); }
+      }}
+      onAuthorPress={onAuthorPress}
+    />
+  );
+}
+
 // App Content Component
 function AppContent() {
   const { isAuthenticated, isLoading, logout, user } = useAuth();
+  const { isDark } = useTheme();
   
   // ── Determinar painel activo via URL hash ──────────────────────────────────
   // #admin       → painel admin
@@ -149,6 +302,8 @@ function AppContent() {
   const [showProfileView, setShowProfileView] = useState(false);
   const [showAddPost, setShowAddPost] = useState(false);
   const [editPostId, setEditPostId] = useState<string | null>(null);
+  /** ID do post mais recentemente criado — passado ao <Map> para zoom automático */
+  const [newPostId, setNewPostId] = useState<string | null>(null);
   const [showNotificationSettings, setShowNotificationSettings] = useState(false);
   const [showPrivacySettings, setShowPrivacySettings] = useState(false);
   const [showBookings, setShowBookings] = useState(false);
@@ -158,8 +313,60 @@ function AppContent() {
   const [showCulture, setShowCulture] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 
+  // ── Detalhe a partir do mapa — pin seleccionado e dados do post ────────────
+  const [mapDetail,            setMapDetail]            = useState<PlacePin | null>(null);
+  const [mapPostDetailData,    setMapPostDetailData]    = useState<any | null>(null);
+  const [mapPostDetailLoading, setMapPostDetailLoading] = useState(false);
+
   useEffect(() => {
-    localStorage.setItem('txopela_onboarding', 'true');
+    // Onboarding visto — marca em memória apenas (sem storage)
+  }, []);
+
+  const { notifyNewResource } = useMapContext();
+
+  /**
+   * Handler partilhado para AddPost.onSuccess nos dois layouts.
+   * - Guarda o postId para o mapa fazer zoom automático.
+   * - Se o post tiver localização válida, navega para o tab do mapa.
+   * - Caso contrário, vai para o home como antes.
+   */
+  const handleAddPostSuccess = useCallback((postId?: string, hasLocation?: boolean) => {
+    setShowAddPost(false);
+    setHomeRefreshKey(prev => prev + 1);
+    if (postId) setNewPostId(postId);
+    if (hasLocation && postId) {
+      // Notificar o MapContext — o mapa vai recarregar e fazer zoom
+      notifyNewResource('post', postId);
+      setShowCulture(false);
+      setActiveTab('map');
+    } else {
+      setActiveTab('home');
+    }
+  }, [notifyNewResource]);
+
+  /**
+   * Chamado pelo Map quando o utilizador clica num pin ou card.
+   * Abre a tela de detalhe correspondente (local, serviço ou post).
+   * Para posts, faz fetch via GET /api/posts/{id}/ para obter dados completos.
+   */
+  const handleMapDetailPress = useCallback((pin: PlacePin) => {
+    setMapDetail(pin);
+    setMapPostDetailData(null);
+    if (pin.pinType === 'post') {
+      const postId = pin.id.replace('post-', '');
+      setMapPostDetailLoading(true);
+      postsApi.get(postId)
+        .then(res => { if (res.data) setMapPostDetailData(res.data); })
+        .finally(() => setMapPostDetailLoading(false));
+    }
+  }, []);
+
+  const handleMapDetailBack = useCallback(() => {
+    setMapDetail(null);
+    setMapPostDetailData(null);
+    setMapPostDetailLoading(false);
+    // Garantir que voltamos ao tab do mapa
+    setActiveTab('map');
   }, []);
 
   // ── Após login bem-sucedido, redireciona conforme role ────────────────────
@@ -230,6 +437,10 @@ function AppContent() {
       return;
     }
     setShowCulture(false);
+    // Limpar detalhe do mapa quando se navega para outro tab
+    setMapDetail(null);
+    setMapPostDetailData(null);
+    setMapPostDetailLoading(false);
     setPreviousTab(activeTab);
     setActiveTab(tab);
   };
@@ -271,18 +482,20 @@ function AppContent() {
       );
     }
     return (
-      <ProtectedRoute
-        requiredRole="admin"
-        onUnauthorized={(reason) => {
-          const msg = reason === 'no_token'
-            ? 'Sessão expirada. Faz login novamente.'
-            : 'Acesso não autorizado para este painel. Requer role "admin".';
-          setAccessDenied(msg);
-          if (reason === 'no_token') logout();
-        }}
-      >
-        <AdminDashboard onLogout={handleLogout} />
-      </ProtectedRoute>
+      <AppShell>
+        <ProtectedRoute
+          requiredRole="admin"
+          onUnauthorized={(reason) => {
+            const msg = reason === 'no_token'
+              ? 'Sessão expirada. Faz login novamente.'
+              : 'Acesso não autorizado para este painel. Requer role "admin".';
+            setAccessDenied(msg);
+            if (reason === 'no_token') logout();
+          }}
+        >
+          <AdminDashboard onLogout={handleLogout} />
+        </ProtectedRoute>
+      </AppShell>
     );
   }
 
@@ -297,18 +510,21 @@ function AppContent() {
       );
     }
     return (
-      <ProtectedRoute
-        requiredRole="curator"
-        onUnauthorized={(reason) => {
-          const msg = reason === 'no_token'
-            ? 'Sessão expirada. Faz login novamente.'
-            : 'Acesso não autorizado para este painel. Requer role "curator" ou "admin".';
-          setAccessDenied(msg);
-          if (reason === 'no_token') logout();
-        }}
-      >
-        <ApuradorDashboard onLogout={handleLogout} />
-      </ProtectedRoute>
+      // forceLight=true: apurador é SEMPRE tema claro, sem excepção
+      <AppShell forceLight>
+        <ProtectedRoute
+          requiredRole="curator"
+          onUnauthorized={(reason) => {
+            const msg = reason === 'no_token'
+              ? 'Sessão expirada. Faz login novamente.'
+              : 'Acesso não autorizado para este painel. Requer role "curator" ou "admin".';
+            setAccessDenied(msg);
+            if (reason === 'no_token') logout();
+          }}
+        >
+          <ApuradorDashboard onLogout={handleLogout} />
+        </ProtectedRoute>
+      </AppShell>
     );
   }
 
@@ -327,11 +543,13 @@ function AppContent() {
     );
   }
 
-  // Splash / Onboarding
+  // Splash / Onboarding — sem tema (pré-autenticação)
   if (showSplash) return <SplashScreen onComplete={() => setShowSplash(false)} />;
-  if (showOnboarding) return <Onboarding onComplete={() => { localStorage.setItem('txopela_onboarding', 'true'); setShowOnboarding(false); }} />;
+  if (showOnboarding) return (
+    <Onboarding onComplete={() => { setShowOnboarding(false); }} />
+  );
 
-  // ── AUTH SCREENS (app normal) ───────────────────────────────────────────────
+  // ── AUTH SCREENS (app normal) — sem tema, sempre claro ─────────────────────
   if (!isAuthenticated) {
     return (
       <AnimatePresence mode="wait">
@@ -365,11 +583,11 @@ function AppContent() {
     );
   }
 
-  // Main App
+  // ── MAIN APP — envolvido em AppShell para aplicar data-theme ───────────────
   return (
-    <div className="min-h-screen bg-gray-50">
+    <AppShell>
       {/* ── DESKTOP LAYOUT ─────────────────────────────────────────────────── */}
-      <div className="hidden md:flex min-h-screen" style={{ background: '#F8F9FB' }}>
+      <div className="hidden md:flex min-h-screen" style={{ background: isDark ? '#0F1117' : '#F8F9FB' }}>
 
         {/* Sidebar colapsável */}
         {(()=> {
@@ -382,10 +600,16 @@ function AppContent() {
               transition={{ type: 'spring', damping: 28, stiffness: 260 }}
               className="fixed left-0 top-0 h-full z-40 flex flex-col overflow-hidden group"
               style={{
-                background: 'rgba(255,255,255,0.97)',
+                background: isDark
+                  ? 'rgba(26,29,39,0.98)'
+                  : 'rgba(255,255,255,0.97)',
                 backdropFilter: 'blur(24px)',
-                borderRight: '1px solid rgba(0,0,0,0.06)',
-                boxShadow: '4px 0 24px rgba(0,0,0,0.04)',
+                borderRight: isDark
+                  ? '1px solid rgba(255,255,255,0.06)'
+                  : '1px solid rgba(0,0,0,0.06)',
+                boxShadow: isDark
+                  ? '4px 0 24px rgba(0,0,0,0.3)'
+                  : '4px 0 24px rgba(0,0,0,0.04)',
                 fontFamily: 'Inter, sans-serif',
               }}
             >
@@ -450,7 +674,7 @@ function AppContent() {
               </div>
 
               {/* Divider */}
-              <div className="mx-3 mb-2" style={{ height: 1, background: 'rgba(0,0,0,0.05)' }} />
+              <div className="mx-3 mb-2" style={{ height: 1, background: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.05)' }} />
 
               {/* Nav items — ordem: Início, Cultura, Mapa, Favoritos, Perfil, Sugerir */}
               <nav className="flex-1 px-2 space-y-0.5">
@@ -511,8 +735,12 @@ function AppContent() {
                               gap: collapsed ? 0 : 12,
                               padding: collapsed ? '10px 0' : '10px 12px',
                               justifyContent: collapsed ? 'center' : 'flex-start',
-                              background: active ? 'rgba(0,119,182,0.1)' : 'transparent',
-                              color: active ? '#0077B6' : '#475569',
+                              background: active
+                                ? (isDark ? 'rgba(56,189,248,0.12)' : 'rgba(0,119,182,0.1)')
+                                : 'transparent',
+                              color: active
+                                ? (isDark ? '#38BDF8' : '#0077B6')
+                                : (isDark ? '#6B7A99' : '#475569'),
                               fontWeight: active ? 600 : 500,
                             }}>
                             <span className="flex-shrink-0">{item.icon(active)}</span>
@@ -534,7 +762,7 @@ function AppContent() {
                       })}
 
                       {/* Divider antes do Sugerir */}
-                      <div className="my-2 mx-1" style={{ height: 1, background: 'rgba(0,0,0,0.05)' }} />
+                      <div className="my-2 mx-1" style={{ height: 1, background: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.05)' }} />
 
                       {/* Sugerir local / serviço */}
                       <motion.button onClick={() => { setShowCulture(false); handleTabChange('add'); }} whileTap={{ scale: 0.97 }}
@@ -568,7 +796,7 @@ function AppContent() {
               </nav>
 
               {/* Bottom — logout */}
-              <div className="px-2 pb-5 pt-2" style={{ borderTop: '1px solid rgba(0,0,0,0.05)' }}>
+              <div className="px-2 pb-5 pt-2" style={{ borderTop: isDark ? '1px solid rgba(255,255,255,0.06)' : '1px solid rgba(0,0,0,0.05)' }}>
                 <motion.button onClick={handleLogout} whileTap={{ scale: 0.97 }}
                   title={collapsed ? 'Sair' : undefined}
                   className="w-full flex items-center rounded-xl hover:bg-red-50 transition-all"
@@ -601,14 +829,21 @@ function AppContent() {
         <motion.main
           animate={{ marginLeft: sidebarCollapsed ? 64 : 240 }}
           transition={{ type: 'spring', damping: 28, stiffness: 260 }}
-          className="flex-1 min-h-screen overflow-y-auto relative"
+          className={activeTab === 'map' && !mapDetail ? 'flex-1 h-screen overflow-hidden relative' : 'flex-1 min-h-screen overflow-y-auto relative'}
+          style={{ '--sidebar-w': `${sidebarCollapsed ? 64 : 240}px` } as React.CSSProperties}
         >
           <AnimatePresence mode="wait">
-            {!selectedLocal && !showFavorites && !showNotifications && !showChatbot && !showSmartSearch && !showSettings && !showEditProfile && !showProfileView && !showNotificationSettings && !showPrivacySettings && !showBookings && !bookingLocal && !showChat && !selectedAuthor && !showCulture && !showAddPost && !editPostId && activeTab !== 'add' && (
-              <motion.div key={activeTab} {...SCREEN_ANIM}>
+            {!selectedLocal && !showFavorites && !showNotifications && !showChatbot && !showSmartSearch && !showSettings && !showEditProfile && !showProfileView && !showNotificationSettings && !showPrivacySettings && !showBookings && !bookingLocal && !showChat && !selectedAuthor && !showCulture && !showAddPost && !editPostId && !mapDetail && activeTab !== 'add' && (
+              <motion.div
+                key={activeTab}
+                initial={{ opacity: activeTab === 'map' ? 1 : 0, y: 0 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: activeTab === 'map' ? 0 : 6 }}
+                transition={{ duration: 0.2, ease: 'easeOut' }}
+              >
                 {activeTab === 'home' && <Home refreshKey={homeRefreshKey} sidebarCollapsed={sidebarCollapsed} onLocalPress={handleLocalPress} onNotifications={() => setShowNotifications(true)} onChat={(query) => { if (query) setChatInitialQuery(query); setShowChatbot(true); }} onMyProfile={() => setActiveTab('profile')} onAuthorPress={(author) => setSelectedAuthor(author)} onEditPost={(postId) => setEditPostId(postId)} onCulture={() => setShowCulture(true)} />}
                 {activeTab === 'explore' && <Favorites onLocalPress={handleLocalPress} onNotifications={() => setShowNotifications(true)} onChat={() => setShowChatbot(true)} />}
-                {activeTab === 'map' && <Map onLocalPress={handleLocalPress} onBack={() => setActiveTab('home')} />}
+                {activeTab === 'map' && <Map onLocalPress={handleLocalPress} onBack={() => setActiveTab('home')} newPostId={newPostId} onNewPostIdConsumed={() => setNewPostId(null)} onDetailPress={handleMapDetailPress} onAuthorPress={(author) => setSelectedAuthor(author)} />}
                 {activeTab === 'profile' && <Profile onSettings={() => setShowSettings(true)} onLocalPress={handleLocalPress} onLogout={handleLogout} onAddPost={() => setShowAddPost(true)} onEditProfile={() => setShowEditProfile(true)} onSuggest={() => setActiveTab('add')} />}
               </motion.div>
             )}
@@ -626,7 +861,7 @@ function AppContent() {
             {showNotifications && <motion.div key="notifications" {...SCREEN_ANIM}><Notifications onNotifications={() => setShowNotifications(false)} onChat={() => { setShowNotifications(false); setShowChatbot(true); }} /></motion.div>}
             {showChatbot && <motion.div key="chatbot" {...SCREEN_ANIM}><Chatbot onBack={() => { setShowChatbot(false); setChatInitialQuery(undefined); }} initialQuery={chatInitialQuery} /></motion.div>}
             {showEditProfile && <motion.div key="edit-profile" initial={{ opacity: 1 }} animate={{ opacity: 1 }} exit={{ opacity: 1 }} className="fixed inset-0 z-[60] bg-white overflow-y-auto"><EditProfile onBack={() => setShowEditProfile(false)} /></motion.div>}
-            {showAddPost && <motion.div key="add-post" {...SCREEN_ANIM}><AddPost onBack={() => setShowAddPost(false)} onSuccess={() => { setShowAddPost(false); setHomeRefreshKey(prev => prev + 1); setActiveTab('home'); }} /></motion.div>}
+            {showAddPost && <motion.div key="add-post" {...SCREEN_ANIM}><AddPost onBack={() => setShowAddPost(false)} onSuccess={handleAddPostSuccess} /></motion.div>}
             {editPostId && <motion.div key="edit-post" {...SCREEN_ANIM}><EditPost postId={editPostId} onBack={() => setEditPostId(null)} onSuccess={() => { setEditPostId(null); setHomeRefreshKey(prev => prev + 1); }} /></motion.div>}
             {showNotificationSettings && <motion.div key="notif-settings" initial={{ opacity: 1 }} animate={{ opacity: 1 }} exit={{ opacity: 1 }} className="fixed inset-0 z-[60] bg-white overflow-y-auto"><NotificationSettings onBack={() => setShowNotificationSettings(false)} /></motion.div>}
             {showPrivacySettings && <motion.div key="privacy" initial={{ opacity: 1 }} animate={{ opacity: 1 }} exit={{ opacity: 1 }} className="fixed inset-0 z-[60] bg-white overflow-y-auto"><PrivacySettings onBack={() => setShowPrivacySettings(false)} /></motion.div>}
@@ -636,17 +871,57 @@ function AppContent() {
             {showChat && <motion.div key="chat" {...SCREEN_ANIM}><Chat onBack={() => setShowChat(false)} /></motion.div>}
             {selectedAuthor && <motion.div key="public-profile" {...SCREEN_ANIM}><PublicProfile author={selectedAuthor} onBack={() => setSelectedAuthor(null)} /></motion.div>}
             {showCulture && <motion.div key="culture" className="absolute inset-0 bg-white overflow-y-auto" {...SCREEN_ANIM}><CultureModule onBack={() => setShowCulture(false)} onAuthorPress={(author) => { setShowCulture(false); setSelectedAuthor(author); }} /></motion.div>}
+
+            {/* ── DETALHES DO MAPA — telas separadas, sem overlay ── */}
+            {mapDetail && mapDetail.pinType === 'local' && (
+              <motion.div key="map-local-detail" className="overflow-y-auto" {...SCREEN_ANIM}>
+                <DestinationDetail
+                  destination={{
+                    id:          mapDetail.id.replace('local-', ''),
+                    name:        mapDetail.name,
+                    category:    mapDetail.category,
+                    provincia:   mapDetail.provincia,
+                    desc:        mapDetail.desc,
+                    image:       mapDetail.image ?? '',
+                    rating:      mapDetail.rating,
+                    reviews:     mapDetail.reviews,
+                    badge:       'Local',
+                    badgeBg:     mapDetail.color,
+                    melhorEpoca: mapDetail.melhorEpoca ?? '',
+                  }}
+                  onBack={handleMapDetailBack}
+                  onExploreMore={handleMapDetailBack}
+                />
+              </motion.div>
+            )}
+            {mapDetail && mapDetail.pinType === 'service' && (
+              <motion.div key="map-service-detail" className="overflow-y-auto" {...SCREEN_ANIM}>
+                <MapServiceDetail pin={mapDetail} onBack={handleMapDetailBack} />
+              </motion.div>
+            )}
+            {mapDetail && mapDetail.pinType === 'post' && (
+              <motion.div key="map-post-detail" className="overflow-y-auto" {...SCREEN_ANIM}>
+                <MapPostDetail
+                  pin={mapDetail}
+                  postData={mapPostDetailData}
+                  loading={mapPostDetailLoading}
+                  onBack={handleMapDetailBack}
+                  onAuthorPress={(author) => { handleMapDetailBack(); setSelectedAuthor(author); }}
+                />
+              </motion.div>
+            )}
           </AnimatePresence>
         </motion.main>
       </div>
 
       {/* ── MOBILE LAYOUT ──────────────────────────────────────────────────── */}
-      <div className="md:hidden w-full bg-white min-h-screen shadow-xl">
+      <div className={`md:hidden w-full shadow-xl ${activeTab === 'map' && !mapDetail ? 'h-screen overflow-hidden' : 'min-h-screen'}`}
+        style={{ background: isDark ? '#0F1117' : '#ffffff' }}>
         <AnimatePresence mode="wait">
-          {!selectedLocal && !showFavorites && !showNotifications && !showChatbot && !showSmartSearch && !showSettings && !showEditProfile && !showProfileView && !showNotificationSettings && !showPrivacySettings && !showBookings && !bookingLocal && !showChat && !selectedAuthor && !showCulture && !showAddPost && !editPostId && activeTab !== 'add' && (
+          {!selectedLocal && !showFavorites && !showNotifications && !showChatbot && !showSmartSearch && !showSettings && !showEditProfile && !showProfileView && !showNotificationSettings && !showPrivacySettings && !showBookings && !bookingLocal && !showChat && !selectedAuthor && !showCulture && !showAddPost && !editPostId && !mapDetail && activeTab !== 'add' && (
             <motion.div
               key={activeTab}
-              initial={{ opacity: 0 }}
+              initial={{ opacity: activeTab === 'map' ? 1 : 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
               transition={{ duration: 0.2 }}
@@ -674,6 +949,10 @@ function AppContent() {
                 <Map
                   onLocalPress={handleLocalPress}
                   onBack={() => setActiveTab('home')}
+                  newPostId={newPostId}
+                  onNewPostIdConsumed={() => setNewPostId(null)}
+                  onDetailPress={handleMapDetailPress}
+                  onAuthorPress={(author) => setSelectedAuthor(author)}
                 />
               )}
               {activeTab === 'profile' && (
@@ -705,7 +984,7 @@ function AppContent() {
           {showChatbot && <motion.div key="chatbot" {...SCREEN_ANIM}><Chatbot onBack={() => { setShowChatbot(false); setChatInitialQuery(undefined); }} initialQuery={chatInitialQuery} /></motion.div>}
           {showSmartSearch && <motion.div key="smartsearch" {...SCREEN_ANIM}><SmartSearch onBack={() => setShowSmartSearch(false)} onLocalPress={handleLocalPress} /></motion.div>}
           {showEditProfile && <motion.div key="edit-profile" initial={{ opacity: 1 }} animate={{ opacity: 1 }} exit={{ opacity: 1 }} className="fixed inset-0 z-[60] bg-white overflow-y-auto"><EditProfile onBack={() => setShowEditProfile(false)} /></motion.div>}
-          {showAddPost && <motion.div key="add-post" {...SCREEN_ANIM}><AddPost onBack={() => setShowAddPost(false)} onSuccess={() => { setShowAddPost(false); setHomeRefreshKey(prev => prev + 1); setActiveTab('home'); }} /></motion.div>}
+          {showAddPost && <motion.div key="add-post" {...SCREEN_ANIM}><AddPost onBack={() => setShowAddPost(false)} onSuccess={handleAddPostSuccess} /></motion.div>}
           {editPostId && <motion.div key="edit-post" {...SCREEN_ANIM}><EditPost postId={editPostId} onBack={() => setEditPostId(null)} onSuccess={() => { setEditPostId(null); setHomeRefreshKey(prev => prev + 1); }} /></motion.div>}
           {showNotificationSettings && <motion.div key="notif-settings" initial={{ opacity: 1 }} animate={{ opacity: 1 }} exit={{ opacity: 1 }} className="fixed inset-0 z-[60] bg-white overflow-y-auto"><NotificationSettings onBack={() => setShowNotificationSettings(false)} /></motion.div>}
           {showPrivacySettings && <motion.div key="privacy" initial={{ opacity: 1 }} animate={{ opacity: 1 }} exit={{ opacity: 1 }} className="fixed inset-0 z-[60] bg-white overflow-y-auto"><PrivacySettings onBack={() => setShowPrivacySettings(false)} /></motion.div>}
@@ -715,29 +994,72 @@ function AppContent() {
           {showChat && <motion.div key="chat" {...SCREEN_ANIM}><Chat onBack={() => setShowChat(false)} /></motion.div>}
           {selectedAuthor && <motion.div key="public-profile" {...SCREEN_ANIM}><PublicProfile author={selectedAuthor} onBack={() => setSelectedAuthor(null)} /></motion.div>}
           {showCulture && <motion.div key="culture" className="fixed inset-0 z-40 bg-white overflow-y-auto" style={{ paddingBottom: 'max(72px, env(safe-area-inset-bottom))' }} {...SCREEN_ANIM}><CultureModule onBack={() => setShowCulture(false)} onAuthorPress={(author) => { setShowCulture(false); setSelectedAuthor(author); }} /></motion.div>}
+
+          {/* ── DETALHES DO MAPA — telas separadas, sem overlay ── */}
+          {mapDetail && mapDetail.pinType === 'local' && (
+            <motion.div key="map-local-detail-m" className="overflow-y-auto" {...SCREEN_ANIM}>
+              <DestinationDetail
+                destination={{
+                  id:          mapDetail.id.replace('local-', ''),
+                  name:        mapDetail.name,
+                  category:    mapDetail.category,
+                  provincia:   mapDetail.provincia,
+                  desc:        mapDetail.desc,
+                  image:       mapDetail.image ?? '',
+                  rating:      mapDetail.rating,
+                  reviews:     mapDetail.reviews,
+                  badge:       'Local',
+                  badgeBg:     mapDetail.color,
+                  melhorEpoca: mapDetail.melhorEpoca ?? '',
+                }}
+                onBack={handleMapDetailBack}
+                onExploreMore={handleMapDetailBack}
+              />
+            </motion.div>
+          )}
+          {mapDetail && mapDetail.pinType === 'service' && (
+            <motion.div key="map-service-detail-m" className="overflow-y-auto" {...SCREEN_ANIM}>
+              <MapServiceDetail pin={mapDetail} onBack={handleMapDetailBack} />
+            </motion.div>
+          )}
+          {mapDetail && mapDetail.pinType === 'post' && (
+            <motion.div key="map-post-detail-m" className="overflow-y-auto" {...SCREEN_ANIM}>
+              <MapPostDetail
+                pin={mapDetail}
+                postData={mapPostDetailData}
+                loading={mapPostDetailLoading}
+                onBack={handleMapDetailBack}
+                onAuthorPress={(author) => { handleMapDetailBack(); setSelectedAuthor(author); }}
+              />
+            </motion.div>
+          )}
         </AnimatePresence>
 
         {/* Bottom nav — mobile only */}
-        {!selectedLocal && !showFavorites && !showNotifications && !showChatbot && !showSmartSearch && !showSettings && !showEditProfile && !showProfileView && !showNotificationSettings && !showPrivacySettings && !showBookings && !bookingLocal && !showChat && !selectedAuthor && !showAddPost && !editPostId && activeTab !== 'add' && (
+        {!selectedLocal && !showFavorites && !showNotifications && !showChatbot && !showSmartSearch && !showSettings && !showEditProfile && !showProfileView && !showNotificationSettings && !showPrivacySettings && !showBookings && !bookingLocal && !showChat && !selectedAuthor && !showAddPost && !editPostId && !mapDetail && activeTab !== 'add' && (
           <BottomNav activeTab={showCulture ? 'culture' : activeTab} onTabChange={handleTabChange} />
         )}
       </div>
-    </div>
+    </AppShell>
   );
 }
 
 // Main App with Providers
 function App() {
   return (
-    <AuthProvider>
-      <AppProvider>
-        <FavoritesProvider>
-        <TourismProvider>
-          <AppContent />
-        </TourismProvider>
-        </FavoritesProvider>
-      </AppProvider>
-    </AuthProvider>
+    <ThemeProvider>
+      <AuthProvider>
+        <MapProvider>
+          <AppProvider>
+            <FavoritesProvider>
+            <TourismProvider>
+              <AppContent />
+            </TourismProvider>
+            </FavoritesProvider>
+          </AppProvider>
+        </MapProvider>
+      </AuthProvider>
+    </ThemeProvider>
   );
 }
 

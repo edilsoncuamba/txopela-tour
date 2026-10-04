@@ -9,6 +9,7 @@ import {
 import { ChevronLeft, ChevronDown, ArrowRight, Check, X, MapPin, Camera, Trash2, Phone, Mail, MessageCircle, Lock, Globe, Hotel, Compass, UtensilsCrossed, Car, Building2, AlertCircle, Sun, Maximize2, DoorOpen, EyeOff } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { servicesApi } from '@/services/api';
+import { uploadAndCache, cacheImages } from '@/utils/imageCache';
 import SubmissionSuccessScreen from '@/components/shared/SubmissionSuccessScreen';
 import { useScrollTop } from '@/hooks/useScrollTop';
 import LocationPicker, { type GeoFields, type LocationSource } from '@/components/LocationPicker';
@@ -63,28 +64,32 @@ const steps = [
   { n: 5, label: 'Revisão' },
 ];
 
+// Uma cor por etapa — bola + linha que sai dela usam sempre a mesma cor
+const STEP_COLORS = ['#1B5E3B', '#0077B6', '#2BB5C8', '#7B5EA7', '#F4821F'];
+
 function StepBar({ current }: { current: number }) {
   return (
-    <div className="flex items-center justify-between px-1 mt-4">
+    <div className="w-full mt-4" style={{ display: 'grid', gridTemplateColumns: '28px 1fr 28px 1fr 28px 1fr 28px 1fr 28px', alignItems: 'center' }}>
       {steps.map((s, i) => {
         const active = s.n === current;
         const done = s.n < current;
+        const color = STEP_COLORS[i];
         return (
-          <div key={s.n} className="flex items-center flex-1">
-            <div className="flex flex-col items-center">
-              <div className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-black border-2"
-                style={{ background: done || active ? '#1B5E3B' : 'white', borderColor: done || active ? '#1B5E3B' : '#E5E7EB', color: done || active ? 'white' : '#9CA3AF' }}>
+          <>
+            <div key={`step-${s.n}`} className="flex flex-col items-center">
+              <div className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-black"
+                style={{ background: (active || done) ? color : 'white', border: `2px solid ${(active || done) ? color : '#E5E7EB'}`, color: (active || done) ? 'white' : '#9CA3AF' }}>
                 {done ? <Check size={12} /> : s.n}
               </div>
-              <span className="text-[9px] font-bold mt-1 text-center"
-                style={{ color: active ? '#1B5E3B' : done ? '#1B5E3B' : '#9CA3AF' }}>
+              <span className="text-[9px] font-bold mt-1 text-center whitespace-nowrap"
+                style={{ color: (active || done) ? color : '#9CA3AF' }}>
                 {s.label}
               </span>
             </div>
             {i < steps.length - 1 && (
-              <div className="flex-1 h-px mx-1 mb-4" style={{ background: done ? '#1B5E3B' : '#E5E7EB' }} />
+              <div key={`line-${i}`} className="h-px" style={{ background: (active || done) ? color : '#E5E7EB', marginBottom: 16 }} />
             )}
-          </div>
+          </>
         );
       })}
     </div>
@@ -96,10 +101,7 @@ function PageHeader({ step, onBack }: { step: number; onBack: () => void }) {
     <div className="bg-white px-4 pt-5 pb-4">
       <div className="max-w-2xl mx-auto">
         <div className="flex items-center gap-3 mb-1">
-          <button onClick={onBack} className="w-9 h-9 bg-gray-100 rounded-full flex items-center justify-center flex-shrink-0">
-            <ChevronLeft size={20} style={{ color: '#1A1A1A' }} />
-          </button>
-          <h1 className="text-2xl font-black" style={{ color: '#1A1A1A' }}>Cadastrar serviço</h1>
+          <h1 className="text-2xl font-black text-left" style={{ color: '#1A1A1A' }}>Cadastrar serviço</h1>
         </div>
         <StepBar current={step} />
       </div>
@@ -112,7 +114,9 @@ function PickerSheet({ title, options, value, onSelect, onClose }: {
   onSelect: (v: string) => void; onClose: () => void;
 }) {
   return (
-    <motion.div className="fixed inset-0 z-50 flex flex-col justify-end"
+    <motion.div
+      className="fixed z-50 flex flex-col justify-end"
+      style={{ top: 0, bottom: 0, left: 'var(--sidebar-w, 0px)', right: 0 }}
       initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
       <div className="absolute inset-0 bg-black/40" onClick={onClose} />
       <motion.div className="relative bg-white rounded-t-3xl flex flex-col" style={{ maxHeight: '75vh' }}
@@ -276,14 +280,13 @@ export default function AddService({
       if (serviceType === 'outro' && outroLabel.trim()) {
         payload.notes = `Tipo de serviço: ${outroLabel.trim()}`;
       }
-      // Todos os campos administrativos com os seus atributos correctos
-      if (distrito.trim()) {
-        payload.district     = distrito.trim();
-        payload.municipality = distrito.trim(); // compatibilidade backend
-      }
-      if (administrativePost.trim()) payload.administrative_post = administrativePost.trim();
-      if (city.trim())               payload.locality            = city.trim();
-      if (nearbyReference.trim())    payload.nearby_reference    = nearbyReference.trim();
+      // Campos de localização — apenas os que existem em ServiceWriteRequest (OpenAPI):
+      //   municipality = Distrito / Cidade
+      //   address      = endereço completo em texto
+      // NOTA: latitude/longitude NÃO existem no ServiceWriteRequest do OpenAPI.
+      //       Para guardar coordenadas em serviços, o backend precisa de ser actualizado.
+      //       Ver: "O que o backend precisa de ter" abaixo.
+      if (distrito.trim())    payload.municipality = distrito.trim();
       // Endereço gerado sem duplicações a partir dos dados reais
       const fullAddress = buildFullAddress({
         locality:           city,
@@ -291,14 +294,12 @@ export default function AddService({
         district:           distrito,
         province:           provincia,
       });
-      if (fullAddress)               payload.address             = fullAddress;
-      if (lat.trim())                payload.latitude            = parseFloat(lat);
-      if (lng.trim())                payload.longitude           = parseFloat(lng);
-      if (whatsapp.trim())           payload.whatsapp            = whatsapp.trim();
-      if (email.trim())              payload.contact_email       = email.trim();
-      if (horario.trim())            payload.schedule            = horario.trim();
+      if (fullAddress)        payload.address      = fullAddress;
+      if (whatsapp.trim())    payload.whatsapp     = whatsapp.trim();
+      if (email.trim())       payload.contact_email = email.trim();
+      if (horario.trim())     payload.schedule     = horario.trim();
 
-      console.log('[AddService] Passo 1 — criar com JSON...');
+      console.log('[AddService] Passo 1 — criar com JSON (ServiceWriteRequest)...');
       const { data, error } = await servicesApi.createJson(payload);
 
       if (error) {
@@ -306,38 +307,82 @@ export default function AddService({
         return;
       }
 
-      console.log('[AddService] ✅ Serviço criado (id:', data?.id, ')');
+      const serviceId = data?.service?.id ?? data?.id;
+      console.log('[AddService] ✅ Serviço criado (id:', serviceId, ')');
 
-      // Passo 2: Se há imagens, actualizar via PUT multipart com todos os campos + images
-      if (photoFiles.length > 0 && data?.id) {
-        console.log('[AddService] Passo 2 — PUT multipart com imagens...');
+      // ⚠️ LIMITAÇÃO DO OPENAPI ACTUAL:
+      // ServiceWriteRequest não tem latitude/longitude.
+      // As coordenadas recolhidas pelo mapa (lat, lng) não podem ser enviadas
+      // via nenhum endpoint do OpenAPI actual sem causar erro de validação.
+      //
+      // BACKEND PRECISA DE SER ACTUALIZADO:
+      //   Adicionar ao ServiceWriteRequest:
+      //     latitude:  { type: number, format: double, nullable: true }
+      //     longitude: { type: number, format: double, nullable: true }
+      //
+      // Até lá, as coordenadas são registadas no endereço textual (address).
+      if (import.meta.env.DEV && lat.trim() && lng.trim()) {
+        console.warn(
+          '[AddService] ⚠️ Coordenadas GPS disponíveis mas ServiceWriteRequest não tem latitude/longitude.',
+          `lat=${lat} lng=${lng}`,
+          'Actualiza o backend para guardar coordenadas em serviços.',
+        );
+      }
+
+      // Passo 2: upload de imagens via POST /api/upload/images/ (context=service)
+      // + PUT multipart para associar ao serviço — dupla estratégia para máxima compatibilidade
+      if (photoFiles.length > 0 && serviceId) {
+        console.log('[AddService] Passo 2 — upload de imagens...');
+
+        // 2a. Upload dedicado → guarda no cache para exibição imediata
+        const uploadedUrls = await uploadAndCache(photoFiles.slice(0, 20), serviceId, 'service');
+        console.log('[AddService] Upload dedicado:', uploadedUrls.length, 'URL(s) obtidas');
+
+        // 2b. PUT multipart para associar imagens ao serviço no backend
+        // Apenas campos definidos em ServiceWriteRequest (OpenAPI)
+        console.log('[AddService] Passo 2b — PUT multipart com imagens...');
         const fd = new FormData();
         fd.append('title',       nome.trim());
         fd.append('description', desc.trim());
-        fd.append('category',    serviceType || 'experience');
+        fd.append('category',    backendCategory);
         fd.append('phone',       telefone.trim());
         fd.append('province',    provincia.trim());
-        if (distrito.trim()) {
-          fd.append('district',            distrito.trim());
-          fd.append('municipality',        distrito.trim()); // compatibilidade
-        }
-        if (administrativePost.trim()) fd.append('administrative_post', administrativePost.trim());
-        if (city.trim())               fd.append('locality',            city.trim());
-        if (nearbyReference.trim())    fd.append('nearby_reference',    nearbyReference.trim());
+        if (distrito.trim())    fd.append('municipality',  distrito.trim());
         const fullAddrMulti = buildFullAddress({ locality: city, administrativePost, district: distrito, province: provincia });
-        if (fullAddrMulti)             fd.append('address',             fullAddrMulti);
-        if (lat.trim())                fd.append('latitude',            lat.trim());
-        if (lng.trim())                fd.append('longitude',           lng.trim());
-        if (whatsapp.trim())           fd.append('whatsapp',            whatsapp.trim());
-        if (email.trim())              fd.append('contact_email',       email.trim());
-        if (horario.trim())            fd.append('schedule',            horario.trim());
+        if (fullAddrMulti)      fd.append('address',       fullAddrMulti);
+        if (whatsapp.trim())    fd.append('whatsapp',      whatsapp.trim());
+        if (email.trim())       fd.append('contact_email', email.trim());
+        if (horario.trim())     fd.append('schedule',      horario.trim());
         photoFiles.slice(0, 20).forEach(f => fd.append('images', f));
 
-        const { error: putErr } = await servicesApi.update(data.id, fd);
+        const { data: putData, error: putErr } = await servicesApi.update(serviceId, fd);
         if (putErr) {
-          console.warn('[AddService] ⚠️ Imagens não associadas:', extractErrorMsg(putErr));
+          console.warn('[AddService] ⚠️ PUT multipart falhou:', extractErrorMsg(putErr));
+          // Imagens do upload dedicado ainda estão no cache — continuar
         } else {
           console.log('[AddService] ✅ Imagens associadas via PUT');
+          // Guardar no cache as URLs que o backend devolveu na resposta do PUT
+          const putImages: string[] = Array.isArray(putData?.images)
+            ? putData.images.filter((u: any) => typeof u === 'string' && u.trim())
+            : [];
+          if (putImages.length > 0) {
+            cacheImages(serviceId, putImages);
+            console.log('[AddService] ✅ URLs do PUT guardadas no cache:', putImages);
+          }
+        }
+
+        // Passo 2c: GET ao serviço para obter imagens reais confirmadas pelo backend
+        try {
+          const { data: getData } = await servicesApi.get(serviceId);
+          const backendImages: string[] = Array.isArray(getData?.images)
+            ? getData.images.filter((u: any) => typeof u === 'string' && u.trim())
+            : [];
+          if (backendImages.length > 0) {
+            cacheImages(serviceId, backendImages);
+            console.log('[AddService] ✅ URLs confirmadas pelo GET guardadas no cache:', backendImages);
+          }
+        } catch {
+          console.warn('[AddService] GET de confirmação falhou — cache mantém URLs do upload');
         }
       }
 
@@ -669,9 +714,6 @@ export default function AddService({
           <p className="text-sm font-black flex items-center gap-2" style={{ color: '#1A1A1A' }}>
             <MapPin size={16} style={{ color: '#1B5E3B' }} />
             Localização
-          </p>
-          <p className="text-xs mt-0.5" style={{ color: '#9CA3AF' }}>
-            Usa o GPS, clica no mapa ou pesquisa para definir a localização do serviço.
           </p>
         </div>
 

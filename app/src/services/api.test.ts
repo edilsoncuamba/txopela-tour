@@ -8,6 +8,7 @@
 
 import { authApi, usersApi } from './api';
 import { backendConfig } from '@/config/backend';
+import { tokenStore } from '@/services/tokenStore';
 
 /**
  * ─────────────────────────────────────────────────────────────────────────────
@@ -95,14 +96,10 @@ export const testRegister = async (
     console.log('✅ Registro bem-sucedido!');
     console.log('Response:', response);
     
-    // Salva os tokens se vieram na resposta
-    if (response.token) {
-      localStorage.setItem('access_token', response.token);
-      console.log('✅ Access token salvo');
-    }
-    if (response.refreshToken) {
-      localStorage.setItem('refresh_token', response.refreshToken);
-      console.log('✅ Refresh token salvo');
+    // Guarda os tokens em memória via tokenStore (sem localStorage)
+    if (response.token && response.refreshToken) {
+      tokenStore.set({ token: response.token, refreshToken: response.refreshToken });
+      console.log('✅ Tokens guardados em memória (tokenStore)');
     }
     
     return response;
@@ -141,8 +138,8 @@ export const testLogin = async (
  * Busca o perfil do usuário autenticado
  */
 export const testGetProfile = async (): Promise<void> => {
-  const token = localStorage.getItem('access_token');
-  
+  const token = tokenStore.getAccess();
+
   if (!token) {
     throw new Error('Nenhum token encontrado. Faça login primeiro!');
   }
@@ -168,8 +165,8 @@ export const testGetProfile = async (): Promise<void> => {
 export const testUpdateProfile = async (
   updateData: any = { bio: 'Updated bio', name: 'Updated Name' }
 ): Promise<void> => {
-  const token = localStorage.getItem('access_token');
-  
+  const token = tokenStore.getAccess();
+
   if (!token) {
     throw new Error('Nenhum token encontrado. Faça login primeiro!');
   }
@@ -221,7 +218,7 @@ export const testLogout = async (): Promise<void> => {
   try {
     authApi.logout();
     console.log('✅ Logout realizado!');
-    console.log('Tokens removidos do localStorage');
+    console.log('Tokens removidos da memória (tokenStore)');
     
     return true;
   } catch (error: any) {

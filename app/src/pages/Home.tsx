@@ -1,5 +1,6 @@
 ﻿import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { useTheme } from '@/context/ThemeContext';
 import {
   IconSearch, IconMapPin, IconChevronRight, IconStar, IconHeart,
   IconBell, IconChat, IconMap, IconMenu, IconUsers, IconPlus,
@@ -16,7 +17,7 @@ import { useAuth } from '@/context/AuthContext';
 import { postsApi, localsApi, servicesApi } from '@/services/api';
 import type { Local } from '@/types';
 import { mapValidLocal, mapValidService, mapValidPost, filterValidPublications } from '@/utils/dataValidation';
-import { SERVICE_CATEGORY_COLOR } from '@/utils/translations';
+import { SERVICE_CATEGORY_COLOR, translateServiceCategory, itemMatchesFilter } from '@/utils/translations';
 import { useFavorites } from '@/context/FavoritesContext';
 import { useScrollTop } from '@/hooks/useScrollTop';
 
@@ -36,10 +37,23 @@ const categories = Object.entries(CATEGORY_LABELS).map(([id, label]) => ({
   id, label: label.replace(' & ', ' &\n'), bg: CATEGORY_COLORS[id],
 }));
 
+// ── Cache de módulo — persiste entre re-renders e navegações na mesma sessão ──
+// Assim o conteúdo aparece instantaneamente ao voltar ao Início ou após login.
+const _cache: {
+  discoveries: any[];
+  services: any[];
+  posts: any[];
+} = {
+  discoveries: [],
+  services: [],
+  posts: [],
+};
+
 export default function Home({
   onLocalPress, onNotifications, onChat, onMyProfile, onAuthorPress, onEditPost, onCulture, refreshKey, sidebarCollapsed }: HomeProps) {
   useScrollTop();
   const { user } = useAuth();
+  const { isDark } = useTheme();
   const { isFavorite, toggleFavorite } = useFavorites();
 
   // Número de cards visíveis depende do estado da sidebar (desktop)
@@ -56,13 +70,13 @@ export default function Home({
   const [showAllServices, setShowAllServices] = useState(false);
   const [showAllPosts, setShowAllPosts] = useState(false);
   
-  // Estados da API
-  const [apiPosts, setApiPosts] = useState<any[]>([]);
-  const [apiDiscoveries, setApiDiscoveries] = useState<any[]>([]);
-  const [apiServices, setApiServices] = useState<any[]>([]);
-  const [isLoadingPosts, setIsLoadingPosts] = useState(true);
-  const [isLoadingDiscoveries, setIsLoadingDiscoveries] = useState(true);
-  const [isLoadingServices, setIsLoadingServices] = useState(true);
+  // Estados da API — inicializados com cache para evitar flash de loading
+  const [apiPosts, setApiPosts] = useState<any[]>(_cache.posts);
+  const [apiDiscoveries, setApiDiscoveries] = useState<any[]>(_cache.discoveries);
+  const [apiServices, setApiServices] = useState<any[]>(_cache.services);
+  const [isLoadingPosts, setIsLoadingPosts] = useState(_cache.posts.length === 0);
+  const [isLoadingDiscoveries, setIsLoadingDiscoveries] = useState(_cache.discoveries.length === 0);
+  const [isLoadingServices, setIsLoadingServices] = useState(_cache.services.length === 0);
 
   // ── "Explorar perto de ti" — usa GET /api/locals/nearby/ com GPS do utilizador
   const [nearbyLocals, setNearbyLocals]         = useState<any[]>([]);
@@ -112,7 +126,8 @@ export default function Home({
           const posts = data.posts ?? data.results ?? (Array.isArray(data) ? data : []);
           // Filtrar e validar apenas posts com dados reais e imagens
           const validPosts = filterValidPublications(posts);
-          setApiPosts(validPosts.slice(0, 10));
+          _cache.posts = validPosts.slice(0, 10);
+          setApiPosts(_cache.posts);
         }
       } catch (err) {
         console.error('Failed to fetch posts:', err);
@@ -174,6 +189,7 @@ export default function Home({
           console.log('[HOME] ✅ Locais válidos após validação:', validPlaces.length);
           
           if (isMounted) {
+            _cache.discoveries = validPlaces;
             setApiDiscoveries(validPlaces); // guardar todos — slice feito em render
             setIsLoadingDiscoveries(false);
           }
@@ -231,6 +247,7 @@ export default function Home({
           const services: any[] = data.services ?? data.results ?? (Array.isArray(data) ? data : []);
           // Filtrar e validar apenas serviços com dados reais e imagens
           const validServices = filterValidPublications(services);
+          _cache.services = validServices;
           setApiServices(validServices); // guardar todos — slice feito em render
         } else {
           setApiServices([]);
@@ -413,7 +430,7 @@ export default function Home({
   }
 
   return (
-    <div className="min-h-screen pb-20 md:pb-0" style={{ background: '#F5F5F0', fontFamily: 'Nunito, sans-serif' }}>
+    <div className="min-h-screen pb-20 md:pb-0" style={{ background: isDark ? '#0F1117' : '#F5F5F0', fontFamily: 'Nunito, sans-serif' }}>
 
       {/* ── HERO ──────────────────────────────────────────────────────────── */}
       <div className="relative">
@@ -440,7 +457,8 @@ export default function Home({
         {/* Search bar — overlapping hero bottom */}
         <div className="absolute left-4 right-4" style={{ bottom: -45 }}>
           <form onSubmit={e => { e.preventDefault(); if (searchQuery.trim()) { onChat(searchQuery); setSearchQuery(''); } }}
-            className="flex items-center bg-white rounded-full shadow-lg px-4 py-3 gap-2">
+            className="flex items-center rounded-2xl shadow-lg px-4 py-3 gap-2"
+            style={{ background: isDark ? '#1A1D27' : '#ffffff', border: isDark ? '1px solid rgba(255,255,255,0.08)' : 'none' }}>
             <IconSearch size={17} className="text-gray-400 flex-shrink-0" />
             <input
               type="text"
@@ -487,42 +505,9 @@ export default function Home({
       {/* Spacer for search overlap */}
       <div style={{ height: 41 }} />
 
-      {/* ── CATEGORIAS ────────────────────────────────────────────────────── */}
-      <div className="bg-white px-4 pt-4 pb-3">
-        <div className="categories-scroll flex gap-4 overflow-x-auto scrollbar-hide">
-          {categories.map((cat) => {
-            const active = activeCategory === cat.id;
-            return (
-              <motion.button
-                key={cat.id}
-                whileTap={{ scale: 0.93 }}
-                onClick={() => setActiveCategory(active ? null : cat.id)}
-                className="flex flex-col items-center gap-1.5 flex-shrink-0"
-              >
-                <div
-                  className="w-12 h-12 rounded-full flex items-center justify-center shadow-sm transition-all"
-                  style={{
-                    background: active ? cat.bg : '#F3F4F6',
-                    outline: active ? `2.5px solid ${cat.bg}` : 'none',
-                    outlineOffset: 2,
-                  }}
-                >
-                  <CategoryIcon id={cat.id} size={18} color={active ? 'white' : cat.bg} />
-                </div>
-                <span
-                  className="text-[10px] font-bold text-center leading-tight whitespace-pre-line"
-                  style={{ maxWidth: 52, color: active ? cat.bg : '#6B7280' }}
-                >
-                  {cat.label}
-                </span>
-              </motion.button>
-            );
-          })}
-        </div>
-      </div>
 
       {/* ── DESCOBERTAS ───────────────────────────────────────────────────── */}
-      <div className="pt-5 pb-2" style={{ background: '#F5F5F0' }}>
+      <div className="pt-5 pb-2" style={{ background: isDark ? '#0F1117' : '#F5F5F0' }}>
         {/* Section header */}
         <div className="flex items-center justify-between px-4 mb-3">
           <div className="flex items-center gap-1.5">
@@ -531,223 +516,138 @@ export default function Home({
               <path d="M12 2l2.4 7.4H22l-6.2 4.5 2.4 7.4L12 17l-6.2 4.3 2.4-7.4L2 9.4h7.6z"/>
             </svg>
             <div>
-              <span className="text-base font-extrabold text-gray-900">Descobertas para ti hoje</span>
-              {/* Contador dinâmico — só após loading */}
-              {!isLoadingDiscoveries && (
-                <p className="text-xs font-semibold" style={{ color: '#6B7280' }}>
-                  {filteredDiscoveries.length > 0
-                    ? `${filteredDiscoveries.length} lugar${filteredDiscoveries.length !== 1 ? 'es' : ''}`
-                    : searchQuery.trim()
-                      ? `Nenhum resultado para "${searchQuery}"`
-                      : 'Nenhum lugar encontrado'}
-                </p>
-              )}
+              <span className="text-base font-extrabold" style={{ color: isDark ? '#F0F4FF' : '#111827' }}>Descobertas para ti hoje</span>
             </div>
           </div>
-          <button className="flex items-center gap-0.5 text-sm font-semibold text-gray-500"
+          <button className="flex items-center gap-0.5 text-sm font-semibold"
+            style={{ color: isDark ? '#6B7A99' : '#6B7280' }}
             onClick={() => setShowAllDiscoveries(true)}>
             Ver mais <IconChevronRight size={16} />
           </button>
         </div>
 
         {/* Cards scroll */}
-        <div className="discoveries-scroll flex gap-3 overflow-x-auto scrollbar-hide px-4 pb-2">
-          {isLoadingDiscoveries ? (
-            /* Skeleton invisível — reserva espaço sem mostrar nada */
-            <>
-              {Array.from({ length: discoveriesLimit }).map((_, i) => (
-                <div
-                  key={i}
-                  className="flex-shrink-0 rounded-2xl"
-                  style={{ width: 200, height: 270, opacity: 0 }}
-                />
-              ))}
-            </>
-          ) : filteredDiscoveries.slice(0, discoveriesLimit).length > 0 ? filteredDiscoveries.slice(0, discoveriesLimit).map((item) => (            <motion.div
-              key={item.id}
-              whileTap={{ scale: 0.97 }}
-              onClick={() => setSelectedDestination(item)}
-              className="flex-shrink-0 rounded-2xl overflow-hidden relative cursor-pointer"
-              style={{ width: 200, height: 270 }}
-            >
-              <img src={item.image} alt={item.name} className="absolute inset-0 w-full h-full object-cover" />
-              {/* Dark gradient bottom */}
-              <div className="absolute inset-0" style={{ background: 'linear-gradient(to top, rgba(0,0,0,0.82) 0%, rgba(0,0,0,0.30) 55%, transparent 100%)' }} />
-
-              {/* Badge + Heart */}
-              <div className="absolute top-3 left-3 right-3 flex items-start justify-between">
-                <span
-                  className="text-white text-[10px] font-bold px-2.5 py-1 rounded-full"
-                  style={{ background: item.badgeBg }}
-                >
-                  {item.badge}
-                </span>
-                <button
-                  onClick={(e) => handleFavoriteLocal(e, item)}
-                  className="w-8 h-8 rounded-full flex items-center justify-center"
-                  style={{ background: 'rgba(255,255,255,0.25)', backdropFilter: 'blur(4px)' }}
-                >
-                  <IconHeart
-                    size={15}
-                    className={isFavorite(item.id) ? 'text-[#0077B6]' : 'text-white'}
-                    fill={isFavorite(item.id) ? 'currentColor' : 'none'}
+        {isLoadingDiscoveries ? (
+          /* Loader centralizado — identidade Txopela Tour */
+          <div className="flex items-center justify-center w-full py-12">
+            <div className="flex flex-col items-center gap-4">
+              {/* Cinco dots com pulse escalonado */}
+              <div className="flex items-center gap-2">
+                {[0, 1, 2, 3, 4].map((i) => (
+                  <motion.div
+                    key={i}
+                    animate={{ y: [0, -8, 0], opacity: [0.3, 1, 0.3] }}
+                    transition={{ duration: 1.4, repeat: Infinity, ease: 'easeInOut', delay: i * 0.18 }}
+                    style={{
+                      width: 8, height: 8, borderRadius: '50%',
+                      background: i === 2 ? '#2BB5C8' : '#2BB5C899',
+                    }}
                   />
-                </button>
+                ))}
               </div>
-
-              {/* Bottom info */}
-              <div className="absolute bottom-0 left-0 right-0 p-3 text-left">
-                <h3 className="text-white font-extrabold text-sm leading-tight mb-1.5">{item.name}</h3>
-                <p className="text-white/80 text-[11px] leading-snug mb-2">{item.desc}</p>
-                {/* Rating à esquerda, categoria à direita */}
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-1">
-                    <IconStar size={11} fill={item.rating > 0 ? '#FBBF24' : 'none'} stroke={item.rating > 0 ? 'none' : '#9CA3AF'} />
-                    <span className="text-white text-xs font-bold">
-                      {item.rating > 0 ? (typeof item.rating === 'number' ? item.rating.toFixed(1) : item.rating) : 'Novo'}
-                    </span>
-                    {item.rating > 0 && <span className="text-white/60 text-[10px]">({item.reviews})</span>}
-                  </div>
-                  <span className="text-white text-[10px] font-bold px-2 py-0.5 rounded-full"
-                    style={{ background: item.tagBg }}>
-                    {item.tag}
-                  </span>
-                </div>
-              </div>
-            </motion.div>
-          )) : (
-            <div className="mx-4 py-8 rounded-2xl flex flex-col items-center gap-2" style={{ background: '#F3F4F6', marginRight: 0, borderTopRightRadius: 0, borderBottomRightRadius: 0 }}>
-              <CategoryIcon id={activeCategory || 'outro'} size={32} color="#D1D5DB" />
-              <p className="text-sm font-bold text-center px-4" style={{ color: '#9CA3AF' }}>
-                {searchQuery.trim()
-                  ? `Nenhum resultado para "${searchQuery}"`
-                  : activeCategory
-                    ? 'Sem descobertas nesta categoria'
-                    : 'Nenhum lugar encontrado'}
-              </p>
-              {(activeCategory || searchQuery.trim()) && (
-                <button onClick={() => { setActiveCategory(null); setSearchQuery(''); }}
-                  className="text-xs font-bold" style={{ color: '#1B5E3B' }}>
-                  Ver todos
-                </button>
-              )}
-            </div>
-          )}
-        </div>
-      </div>
-
-      {/* ── EXPLORAR PERTO DE TI ─────────────────────────────────────────── */}
-      <div className="py-4 bg-white mb-2">
-        <div className="flex items-center justify-between px-4 mb-3">
-          <div className="flex items-center gap-2">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#0077B6" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M4.22 4.22l2.12 2.12M17.66 17.66l2.12 2.12M2 12h3M19 12h3M4.22 19.78l2.12-2.12M17.66 6.34l2.12-2.12"/>
-            </svg>
-            <h3 className="text-base font-black" style={{ color: '#1A1A1A' }}>Explorar perto de ti</h3>
-          </div>
-        </div>
-
-        {/* Estado: não solicitado ainda */}
-        {!nearbyRequested && !isLoadingNearby && (
-          <div className="mx-4">
-            <motion.button
-              whileTap={{ scale: 0.97 }}
-              onClick={fetchNearby}
-              className="w-full flex items-center justify-center gap-2 py-3.5 rounded-2xl text-sm font-black border-2"
-              style={{ borderColor: '#0077B6', background: '#EFF8FF', color: '#0077B6' }}
-            >
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                <circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M4.22 4.22l2.12 2.12M17.66 17.66l2.12 2.12M2 12h3M19 12h3M4.22 19.78l2.12-2.12M17.66 6.34l2.12-2.12"/>
-              </svg>
-              Encontrar lugares perto de mim
-            </motion.button>
-          </div>
-        )}
-
-        {/* Estado: a carregar */}
-        {isLoadingNearby && (
-          <div className="px-4 flex gap-3 overflow-x-auto scrollbar-hide pb-2">
-            {[1, 2, 3].map(i => (
-              <div key={i} className="flex-shrink-0 rounded-2xl overflow-hidden animate-pulse"
-                style={{ width: 180, height: 240, background: '#E5E7EB' }} />
-            ))}
-          </div>
-        )}
-
-        {/* Estado: erro de localização */}
-        {nearbyError && !isLoadingNearby && (
-          <div className="mx-4 flex items-start gap-3 px-4 py-3 rounded-2xl"
-            style={{ background: '#FFF7ED', border: '1px solid #FED7AA' }}>
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#C2410C" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="flex-shrink-0 mt-0.5">
-              <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
-            </svg>
-            <div>
-              <p className="text-xs font-bold" style={{ color: '#C2410C' }}>{nearbyError}</p>
-              <button onClick={fetchNearby} className="text-xs font-bold mt-1" style={{ color: '#0077B6' }}>
-                Tentar novamente
-              </button>
             </div>
           </div>
-        )}
-
-        {/* Estado: resultados */}
-        {nearbyRequested && !isLoadingNearby && !nearbyError && nearbyLocals.length > 0 && (
-          <div className="flex gap-3 overflow-x-auto scrollbar-hide px-4 pb-2">
-            {nearbyLocals.map((item: any) => (
+        ) : (
+          <>
+            <div className="discoveries-scroll flex gap-3 overflow-x-auto scrollbar-hide px-4 pb-2">
+              {filteredDiscoveries.slice(0, discoveriesLimit).map((item) => (
               <motion.div
                 key={item.id}
                 whileTap={{ scale: 0.97 }}
                 onClick={() => setSelectedDestination(item)}
                 className="flex-shrink-0 rounded-2xl overflow-hidden relative cursor-pointer"
-                style={{ width: 180, height: 240 }}
+                style={{ width: 200, height: 270 }}
               >
                 <img src={item.image} alt={item.name} className="absolute inset-0 w-full h-full object-cover" />
-                <div className="absolute inset-0" style={{ background: 'linear-gradient(to top, rgba(0,0,0,0.82) 0%, rgba(0,0,0,0.25) 55%, transparent 100%)' }} />
-                <span className="absolute top-3 left-3 text-white text-[10px] font-bold px-2.5 py-1 rounded-full"
-                  style={{ background: item.badgeBg }}>{item.badge}</span>
+                {/* Dark gradient bottom */}
+                <div className="absolute inset-0" style={{ background: 'linear-gradient(to top, rgba(0,0,0,0.82) 0%, rgba(0,0,0,0.30) 55%, transparent 100%)' }} />
+
+                {/* Badge + Heart */}
+                <div className="absolute top-3 left-3 right-3 flex items-start justify-between">
+                  <span
+                    className="text-white text-[10px] font-bold px-2.5 py-1 rounded-full"
+                    style={{ background: item.badgeBg }}
+                  >
+                    {item.badge}
+                  </span>
+                  <button
+                    onClick={(e) => handleFavoriteLocal(e, item)}
+                    className="w-8 h-8 rounded-full flex items-center justify-center"
+                    style={{ background: 'rgba(255,255,255,0.25)', backdropFilter: 'blur(4px)' }}
+                  >
+                    <IconHeart
+                      size={15}
+                      className={isFavorite(item.id) ? 'text-[#0077B6]' : 'text-white'}
+                      fill={isFavorite(item.id) ? 'currentColor' : 'none'}
+                    />
+                  </button>
+                </div>
+
+                {/* Bottom info */}
                 <div className="absolute bottom-0 left-0 right-0 p-3 text-left">
-                  <h3 className="text-white font-extrabold text-xs leading-tight mb-1">{item.name}</h3>
-                  {/* Distância real da API */}
-                  {(item.distance ?? item.dist) && (
-                    <p className="text-white/80 text-[10px] mb-1">
-                      {typeof (item.distance ?? item.dist) === 'number'
-                        ? `${((item.distance ?? item.dist) as number).toFixed(1)} km`
-                        : item.distance ?? item.dist}
-                    </p>
-                  )}
-                  <div className="flex items-center gap-1">
-                    <svg width="10" height="10" viewBox="0 0 24 24" fill={item.rating > 0 ? '#FBBF24' : 'none'} stroke={item.rating > 0 ? 'none' : '#9CA3AF'} strokeWidth="2">
-                      <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
-                    </svg>
-                    <span className="text-white text-[10px] font-bold">
-                      {item.rating > 0 ? item.rating.toFixed(1) : 'Novo'}
+                  <h3 className="text-white font-extrabold text-sm leading-tight mb-1.5">{item.name}</h3>
+                  <p className="text-white/80 text-[11px] leading-snug mb-2">
+                    {item.desc ? item.desc.split(' ').slice(0, 4).join(' ') + (item.desc.split(' ').length > 4 ? '...' : '') : ''}
+                  </p>
+                  {/* Rating à esquerda, categoria à direita */}
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-1">
+                      <IconStar size={11} fill={item.rating > 0 ? '#FBBF24' : 'none'} stroke={item.rating > 0 ? 'none' : '#9CA3AF'} />
+                      <span className="text-white text-xs font-bold">
+                        {item.rating > 0 ? (typeof item.rating === 'number' ? item.rating.toFixed(1) : item.rating) : 'Novo'}
+                      </span>
+                      {item.rating > 0 && <span className="text-white/60 text-[10px]">({item.reviews})</span>}
+                    </div>
+                    <span className="text-white text-[10px] font-bold px-2 py-0.5 rounded-full"
+                      style={{ background: (() => {
+                        const cats = ['Praias','Cultura & História','Natureza','Aventura','Gastronomia','Mergulho','Ecoturismo'];
+                        const colors: Record<string,string> = { 'Praias':'#2BB5C8','Cultura & História':'#7B5EA7','Natureza':'#22C55E','Aventura':'#F4821F','Gastronomia':'#E05A3A','Mergulho':'#0EA5E9','Ecoturismo':'#1B5E3B' };
+                        const match = cats.find(c => itemMatchesFilter(item, c));
+                        return match ? colors[match] : '#6B7280';
+                      })() }}>
+                      {(() => {
+                        const cats = ['Praias','Cultura & História','Natureza','Aventura','Gastronomia','Mergulho','Ecoturismo'];
+                        return cats.find(c => itemMatchesFilter(item, c)) || 'Outro';
+                      })()}
                     </span>
                   </div>
                 </div>
               </motion.div>
             ))}
-          </div>
+            </div>
+            {filteredDiscoveries.slice(0, discoveriesLimit).length === 0 && (
+              <div className="mx-4 py-8 rounded-2xl flex flex-col items-center gap-2"
+                style={{ background: isDark ? '#1A1D27' : '#F3F4F6' }}>
+                <CategoryIcon id={activeCategory || 'outro'} size={32} color="#D1D5DB" />
+                <p className="text-sm font-bold text-center px-4" style={{ color: '#9CA3AF' }}>
+                  {searchQuery.trim()
+                    ? `Nenhum resultado para "${searchQuery}"`
+                    : activeCategory
+                      ? 'Sem descobertas nesta categoria'
+                      : 'Nenhum lugar encontrado'}
+                </p>
+                {(activeCategory || searchQuery.trim()) && (
+                  <button onClick={() => { setActiveCategory(null); setSearchQuery(''); }}
+                    className="text-xs font-bold" style={{ color: '#1B5E3B' }}>
+                    Ver todos
+                  </button>
+                )}
+              </div>
+            )}
+          </>
         )}
 
-        {/* Estado: sem resultados próximos */}
-        {nearbyRequested && !isLoadingNearby && !nearbyError && nearbyLocals.length === 0 && (
-          <div className="mx-4 py-5 rounded-2xl flex flex-col items-center gap-2" style={{ background: '#F3F4F6' }}>
-            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#9CA3AF" strokeWidth="1.5">
-              <circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M4.22 4.22l2.12 2.12M17.66 17.66l2.12 2.12M2 12h3M19 12h3M4.22 19.78l2.12-2.12M17.66 6.34l2.12-2.12"/>
-            </svg>
-            <p className="text-sm font-bold text-center" style={{ color: '#9CA3AF' }}>
-              Nenhum lugar encontrado nas proximidades
-            </p>
-          </div>
-        )}
       </div>
 
+      {/* ── EXPLORAR POR PROVÍNCIA + BANNER CULTURA ── fundo contínuo ── */}
+      <div style={{ background: isDark ? '#1A1D27' : '#ffffff' }}>
+
       {/* ── EXPLORAR POR PROVÍNCIA ────────────────────────────────────────── */}
-      <div className="py-4 bg-white mb-2">
+      <div className="py-4">
         <div className="flex items-center justify-between px-4 mb-3">
           <div className="flex items-center gap-2">
             <IconMapPin size={18} style={{ color: '#1B5E3B' }} />
-            <h3 className="text-base font-black" style={{ color: '#1A1A1A' }}>Explorar por província</h3>          </div>
+            <h3 className="text-base font-black" style={{ color: isDark ? '#F0F4FF' : '#1A1A1A' }}>Explorar por província</h3>          </div>
           {selectedProvincia && (
             <button onClick={() => setSelectedProvincia(null)}
               className="text-xs font-bold px-3 py-1 rounded-full"
@@ -831,7 +731,7 @@ export default function Home({
 
       {/* ── BANNER PATRIMÔNIO CULTURAL ────────────────────────────────────── */}
       {onCulture && (
-        <div className="px-4 py-4 bg-white mb-2">
+        <div className="px-4 py-4">
           <motion.button
             whileTap={{ scale: 0.98 }}
             onClick={onCulture}
@@ -867,8 +767,10 @@ export default function Home({
         </div>
       )}
 
+      </div>{/* ── fim fundo branco contínuo ── */}
+
       {/* ── SERVIÇOS LOCAIS ───────────────────────────────────────────────── */}
-      <div className="pt-5 pb-0" style={{ background: '#F5F5F0' }}>
+      <div className="pt-5 pb-0" style={{ background: isDark ? '#0F1117' : '#F5F5F0' }}>
         {/* Section header */}
         <div className="flex items-center justify-between px-4 mb-3">
           <div className="flex items-center gap-1.5">
@@ -877,10 +779,11 @@ export default function Home({
               <path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/>
               <polyline points="9 22 9 12 15 12 15 22"/>
             </svg>
-            <span className="text-base font-extrabold text-gray-900">{serviceSectionTitle}</span>
+            <span className="text-base font-extrabold" style={{ color: isDark ? '#F0F4FF' : '#111827' }}>{serviceSectionTitle}</span>
           </div>
-          <button 
-            className="flex items-center gap-0.5 text-sm font-semibold text-gray-500"
+          <button
+            className="flex items-center gap-0.5 text-sm font-semibold"
+            style={{ color: isDark ? '#6B7A99' : '#6B7280' }}
             onClick={() => setShowAllServices(true)}
           >
             Ver mais <IconChevronRight size={16} />
@@ -888,22 +791,42 @@ export default function Home({
         </div>
 
         {isLoadingServices ? (
-          /* Skeleton invisível — reserva espaço sem mostrar nada */
-          <div className="flex gap-3 overflow-x-auto scrollbar-hide px-4 pb-2">
-            {Array.from({ length: servicesLimit }).map((_, i) => (
-              <div
-                key={i}
-                className="flex-shrink-0 rounded-2xl"
-                style={{ width: 200, height: 270, opacity: 0 }}
-              />
-            ))}
+          /* Loader animado — identidade Txopela Tour */
+          /* Loader animado — identidade Txopela Tour */
+          <div className="flex items-center justify-center w-full py-12">
+            <div className="flex flex-col items-center gap-4">
+              {/* Cinco dots com pulse escalonado */}
+              <div className="flex items-center gap-2">
+                {[0, 1, 2, 3, 4].map((i) => (
+                  <motion.div
+                    key={i}
+                    animate={{ y: [0, -8, 0], opacity: [0.3, 1, 0.3] }}
+                    transition={{ duration: 1.4, repeat: Infinity, ease: 'easeInOut', delay: i * 0.18 }}
+                    style={{
+                      width: 8, height: 8, borderRadius: '50%',
+                      background: i === 2 ? '#2BB5C8' : '#2BB5C899',
+                    }}
+                  />
+                ))}
+              </div>
+            </div>
           </div>
         ) : filteredServices.length > 0 ? (
           /* Cards scroll horizontal - matching Descobertas style */
           <div className="services-scroll flex gap-3 overflow-x-auto scrollbar-hide px-4 pb-2">
             {filteredServices.map((svc) => {
               const badgeBg = svc.badgeBg || '#0F766E';
-              const badgeLabel = svc.badge || svc.category;
+              const badgeLabel = svc.badge || translateServiceCategory(svc.category);
+              const SVC_CAT_COLOR: Record<string, string> = {
+                'Hospedagem':     '#2563EB',
+                'Guia Turístico': '#F4821F',
+                'Experiência':    '#22C55E',
+                'Transporte':     '#1B5E3B',
+                'Equipamento':    '#E05A3A',
+                'Outro':          '#7B5EA7',
+              };
+              const catLabel = translateServiceCategory(svc.category);
+              const catColor = SVC_CAT_COLOR[catLabel] || '#7B5EA7';
               
               return (
                 <motion.div
@@ -960,7 +883,9 @@ export default function Home({
                   {/* Bottom info */}
                   <div className="absolute bottom-0 left-0 right-0 p-3 text-left">
                     <h3 className="text-white font-extrabold text-sm leading-tight mb-1.5">{svc.name}</h3>
-                    <p className="text-white/80 text-[11px] leading-snug mb-2">{svc.provincia}</p>
+                    <p className="text-white/80 text-[11px] leading-snug mb-2">
+                      {svc.description ? svc.description.split(' ').slice(0, 4).join(' ') + (svc.description.split(' ').length > 4 ? '...' : '') : ''}
+                    </p>
                     {/* Rating à esquerda, categoria à direita */}
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-1">
@@ -971,16 +896,18 @@ export default function Home({
                         {svc.rating > 0 && <span className="text-white/60 text-[10px]">({svc.reviews})</span>}
                       </div>
                       <span className="text-white text-[10px] font-bold px-2 py-0.5 rounded-full"
-                        style={{ background: badgeBg }}>
-                        {svc.category}
-                      </span>                    </div>
+                        style={{ background: catColor }}>
+                        {catLabel}
+                      </span>
+                    </div>
                   </div>
                 </motion.div>
               );
             })}
           </div>
         ) : (
-          <div className="mx-4 py-8 rounded-2xl flex flex-col items-center gap-2" style={{ background: '#F3F4F6' }}>
+          <div className="mx-4 py-8 rounded-2xl flex flex-col items-center gap-2"
+            style={{ background: isDark ? '#1A1D27' : '#F3F4F6' }}>
             <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#9CA3AF" strokeWidth="1.5">
               <path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/>
             </svg>

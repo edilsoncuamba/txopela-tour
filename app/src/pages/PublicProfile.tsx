@@ -7,6 +7,7 @@ import UserListModal, { type UserSummary } from '@/components/UserListModal';
 import { usersApi, postsApi } from '@/services/api';
 import { useAuth } from '@/context/AuthContext';
 import { useScrollTop } from '@/hooks/useScrollTop';
+import { useTheme } from '@/context/ThemeContext';
 
 interface Author {
   id: string;
@@ -72,6 +73,16 @@ export default function PublicProfile({
   author, allPosts, onBack }: PublicProfileProps) {
   useScrollTop();
   const { user: currentUser } = useAuth();
+  const { isDark } = useTheme();
+  const dm = {
+    bg:      isDark ? '#0F1117' : '#F5F5F0',
+    surface: isDark ? '#1A1D27' : '#ffffff',
+    border:  isDark ? 'rgba(255,255,255,0.07)' : '#F3F4F6',
+    text:    isDark ? '#F0F4FF' : '#1A1A1A',
+    text2:   isDark ? '#6B7A99' : '#9CA3AF',
+    back:    isDark ? '#22263A' : '#F3F4F6',
+    skel:    isDark ? '#22263A' : '#E5E7EB',
+  };
 
   // Estado do perfil p�blico (carregado via GET /api/users/{userId})
   const [profile, setProfile] = useState<{
@@ -276,22 +287,22 @@ export default function PublicProfile({
   return (
     <motion.div
       className="min-h-screen pb-24"
-      style={{ background: '#F5F5F0', fontFamily: 'Nunito, sans-serif' }}
+      style={{ background: dm.bg, fontFamily: 'Nunito, sans-serif' }}
       initial={{ opacity: 0, y: 10 }}
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: 6 }}
       transition={{ duration: 0.2, ease: 'easeOut' }}
     >
       {/* -- Header -------------------------------------------------------- */}
-      <div className="bg-white px-4 py-4 sticky top-0 z-30 flex items-center justify-between shadow-sm">
+      <div className="px-4 py-4 sticky top-0 z-30 flex items-center justify-between shadow-sm"
+        style={{ background: dm.surface, borderBottom: `1px solid ${dm.border}` }}>
         <div className="flex items-center gap-3">
-          <button
-            onClick={onBack}
-            className="w-9 h-9 bg-gray-100 rounded-full flex items-center justify-center"
-          >
-            <ChevronLeft size={20} style={{ color: '#1A1A1A' }} />
+          <button onClick={onBack}
+            className="w-9 h-9 rounded-full flex items-center justify-center"
+            style={{ background: dm.back }}>
+            <ChevronLeft size={20} style={{ color: dm.text }} />
           </button>
-          <h1 className="text-base font-black truncate max-w-[200px]" style={{ color: '#1A1A1A' }}>
+          <h1 className="text-base font-black truncate max-w-[200px]" style={{ color: dm.text }}>
             {displayName}
           </h1>
         </div>
@@ -304,7 +315,7 @@ export default function PublicProfile({
       </div>
 
       {/* -- Perfil -------------------------------------------------------- */}
-      <div className="bg-white px-4 pb-5">
+      <div className="px-4 pb-5" style={{ background: dm.surface }}>
         {isLoadingProfile ? (
           <div className="flex items-center justify-center py-10">
             <Loader2 size={28} className="animate-spin" style={{ color: '#1B5E3B' }} />
@@ -330,38 +341,38 @@ export default function PublicProfile({
               {/* Stats � posts, seguidores, a seguir */}
               <div className="flex-1 flex items-center justify-around">
                 <div className="text-center">
-                  <p className="text-lg font-black" style={{ color: '#1A1A1A' }}>{stats.postsCount}</p>
-                  <p className="text-[11px] font-semibold" style={{ color: '#9CA3AF' }}>publica��es</p>
+                  <p className="text-lg font-black" style={{ color: dm.text }}>{stats.postsCount}</p>
+                  <p className="text-[11px] font-semibold" style={{ color: dm.text2 }}>publicações</p>
                 </div>
                 <button
                   className="text-center"
                   onClick={() => setUserListModal({ title: 'Seguidores', users: [] })}
                 >
-                  <p className="text-lg font-black" style={{ color: '#1A1A1A' }}>
+                  <p className="text-lg font-black" style={{ color: dm.text }}>
                     {stats.followersCount >= 1000
                       ? `${(stats.followersCount / 1000).toFixed(1)}k`
                       : stats.followersCount}
                   </p>
-                  <p className="text-[11px] font-semibold" style={{ color: '#9CA3AF' }}>seguidores</p>
+                  <p className="text-[11px] font-semibold" style={{ color: dm.text2 }}>seguidores</p>
                 </button>
                 <button
                   className="text-center"
                   onClick={() => setUserListModal({ title: 'A seguir', users: [] })}
                 >
-                  <p className="text-lg font-black" style={{ color: '#1A1A1A' }}>{stats.followingCount}</p>
-                  <p className="text-[11px] font-semibold" style={{ color: '#9CA3AF' }}>a seguir</p>
+                  <p className="text-lg font-black" style={{ color: dm.text }}>{stats.followingCount}</p>
+                  <p className="text-[11px] font-semibold" style={{ color: dm.text2 }}>a seguir</p>
                 </button>
               </div>
             </div>
 
             {/* Nome + Bio + Localiza��o */}
             <div className="mb-4">
-              <p className="text-sm font-black mb-0.5" style={{ color: '#1A1A1A' }}>{displayName}</p>
-              <p className="text-xs font-semibold mb-1" style={{ color: '#9CA3AF' }}>
+              <p className="text-sm font-black mb-0.5" style={{ color: dm.text }}>{displayName}</p>
+              <p className="text-xs font-semibold mb-1" style={{ color: dm.text2 }}>
                 {typeLabels[author.type] || author.type}
               </p>
               {displayBio && (
-                <p className="text-sm leading-snug mb-1.5" style={{ color: '#374151' }}>{displayBio}</p>
+                <p className="text-sm leading-snug mb-1.5" style={{ color: isDark ? '#A8B4CC' : '#374151' }}>{displayBio}</p>
               )}
               {profile?.joinedAt && (
                 <div className="flex items-center gap-1">
@@ -418,8 +429,9 @@ export default function PublicProfile({
       </div>
 
       {/* Divider + Tab */}
-      <div className="bg-white border-t border-gray-100 flex items-center justify-center py-3 mb-1">
-        <Grid size={18} style={{ color: '#1A1A1A' }} strokeWidth={2.5} />
+      <div className="border-t flex items-center justify-center py-3 mb-1"
+        style={{ background: dm.surface, borderColor: dm.border }}>
+        <Grid size={18} style={{ color: dm.text }} strokeWidth={2.5} />
       </div>
 
       {/* -- Grid de Posts ------------------------------------------------- */}

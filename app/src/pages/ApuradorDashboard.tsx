@@ -418,7 +418,7 @@ export default function ApuradorDashboard({
     try {
       // 1. Busca pendentes + stats em paralelo
       const [pr, statsRes] = await Promise.all([
-        adminApi.getPendingApprovals({ limit: 100 }),
+        adminApi.getPendingApprovals(),
         adminApi.getStats(),
       ]);
 
