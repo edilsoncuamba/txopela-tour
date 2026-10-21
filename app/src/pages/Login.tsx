@@ -41,7 +41,6 @@ export default function Login({
   const [email, setEmail]         = useState('');
   const [password, setPassword]   = useState('');
   const [showPass, setShowPass]   = useState(false);
-  const [remember, setRemember]   = useState(true);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError]         = useState('');
   const [slide, setSlide]         = useState(0);
@@ -91,29 +90,30 @@ export default function Login({
 
   return (
     <div
-      className="h-screen w-full relative flex items-center justify-center overflow-hidden"
+      className="fixed inset-0 flex items-center justify-center overflow-hidden"
       style={{ fontFamily: 'Inter, Nunito, sans-serif' }}
     >
-      {/* ── FUNDO: slideshow de destinos ──────────────────────────────────── */}
-      <AnimatePresence mode="sync">
-        <motion.img
-          key={current.image}
-          src={current.image}
-          alt={current.caption}
-          className="absolute inset-0 w-full h-full object-cover object-center"
-          initial={{ opacity: 0, scale: 1.04 }}
-          animate={{ opacity: 1, scale: 1 }}
-          exit={{ opacity: 0 }}
-          transition={{ duration: 1.2, ease: 'easeInOut' }}
+      {/* ── FUNDO: slideshow de destinos — troca sem efeito visível ────────── */}
+      {slides.map((s, i) => (
+        <img
+          key={s.image}
+          src={s.image}
+          alt={s.caption}
+          className="fixed inset-0 w-full h-full object-cover object-center"
+          style={{
+            opacity: i === slide ? 1 : 0,
+            transition: 'none',
+            zIndex: i === slide ? 0 : -1,
+          }}
         />
-      </AnimatePresence>
+      ))}
 
       {/* Overlay multicamada */}
-      <div className="absolute inset-0" style={{
+      <div className="fixed inset-0" style={{
         background: 'linear-gradient(105deg, rgba(5,30,15,0.82) 0%, rgba(5,30,15,0.60) 45%, rgba(5,20,10,0.45) 100%)',
       }} />
       {/* Vinheta nas bordas */}
-      <div className="absolute inset-0" style={{
+      <div className="fixed inset-0" style={{
         background: 'radial-gradient(ellipse at center, transparent 40%, rgba(0,0,0,0.45) 100%)',
       }} />
 
@@ -139,46 +139,16 @@ export default function Login({
         </div>
       </div>
 
-      {/* ── SLIDE INDICATOR — canto inferior esquerdo ─────────────────────── */}
-      <div className="absolute bottom-6 left-6 md:bottom-10 md:left-10 z-20">
-        <div className="flex items-center gap-2 mb-2 justify-start">
-          {slides.map((_, i) => (
-            <button
-              key={i}
-              onClick={() => setSlide(i)}
-              className="transition-all duration-300"
-              style={{
-                width: i === slide ? 24 : 6,
-                height: 6,
-                borderRadius: 3,
-                background: i === slide ? 'white' : 'rgba(255,255,255,0.35)',
-              }}
-            />
-          ))}
-        </div>
-        <AnimatePresence mode="wait">
-          <motion.div
-            key={slide}
-            initial={{ opacity: 0, y: 6 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -6 }}
-            transition={{ duration: 0.4 }}
-          >
-            <p className="text-sm font-bold text-white text-left" style={{ textShadow: '0 1px 6px rgba(0,0,0,0.6)' }}>{current.caption}</p>
-            <p className="text-xs font-medium text-left" style={{ color: 'rgba(255,255,255,0.65)' }}>
-              {current.province}, Moçambique
-            </p>
-          </motion.div>
-        </AnimatePresence>
-      </div>
+
 
       {/* ── CONTEÚDO PRINCIPAL ────────────────────────────────────────────── */}
-      <div className="relative z-10 w-full h-full flex flex-col lg:flex-row items-center justify-center lg:justify-between px-5 md:px-10 lg:px-16 xl:px-24 gap-8 lg:gap-12">
+      <div className="relative z-10 w-full h-full flex flex-col lg:flex-row items-end lg:items-center justify-end lg:justify-between px-0 lg:px-16 xl:px-24 gap-0 lg:gap-12">
 
-        {/* ── LADO ESQUERDO — copy ──────────────────────────────────────────── */}
+        {/* spacer — empurra o card para baixo no mobile */}
+        <div className="flex-1 lg:hidden" style={{ minHeight: '4rem' }} />
+
+        {/* ── LADO ESQUERDO — copy (desktop only) ───────────────────────────── */}
         <div className="hidden lg:flex flex-col max-w-sm xl:max-w-md flex-shrink-0" style={{ marginBottom: '4rem' }}>
-
-          {/* Headline principal */}
           <h1
             className="font-black leading-[1.05]"
             style={{
@@ -199,27 +169,36 @@ export default function Login({
           </h1>
         </div>
 
-        {/* ── CARD DO FORMULÁRIO ────────────────────────────────────────────── */}
+        {/* ── CARD DO FORMULÁRIO — scroll independente ──────────────────────── */}
         <motion.div
           initial={{ opacity: 0, y: 28, scale: 0.96 }}
           animate={{ opacity: 1, y: 0, scale: 1 }}
           transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
-          className="w-full flex-shrink-0"
-          style={{ maxWidth: 420 }}
+          className="w-full flex-shrink-0 lg:max-w-[420px]"
+          style={{
+            maxHeight: '100dvh',
+            overflowY: 'auto',
+            overflowX: 'hidden',
+            scrollbarWidth: 'none',
+            msOverflowStyle: 'none',
+          } as React.CSSProperties}
         >
           <div
-            className="rounded-3xl px-6 py-6 md:px-8 md:py-7"
+            className="rounded-t-3xl lg:rounded-3xl px-6 py-6 md:px-8 md:py-7"
             style={{
-              background: 'rgba(255,255,255,0.97)',
-              backdropFilter: 'blur(32px)',
-              boxShadow: '0 32px 80px rgba(0,0,0,0.3), 0 4px 20px rgba(0,0,0,0.15), inset 0 1px 0 rgba(255,255,255,0.8)',
+              background: 'rgba(255,255,255,0.18)',
+              backdropFilter: 'blur(28px)',
+              WebkitBackdropFilter: 'blur(28px)',
+              boxShadow: '0 -8px 40px rgba(0,0,0,0.18), inset 0 1px 0 rgba(255,255,255,0.35)',
+              border: '1px solid rgba(255,255,255,0.25)',
+              borderBottom: 'none',
             }}
           >
             {/* Header */}
             <div className="mb-4 text-center">
               <h2
                 className="font-black mb-1"
-                style={{ fontSize: '1.4rem', color: '#0F172A', letterSpacing: '-0.025em' }}
+                style={{ fontSize: '1.4rem', color: 'white', letterSpacing: '-0.025em', textShadow: '0 1px 8px rgba(0,0,0,0.3)' }}
               >
                 Bem-vindo(a)!
               </h2>
@@ -229,14 +208,14 @@ export default function Login({
 
               {/* Email */}
               <div>
-                <label className="block text-xs font-semibold mb-1.5 text-left" style={{ color: '#374151' }}>
+                <label className="block text-xs font-semibold mb-1.5 text-left" style={{ color: 'rgba(255,255,255,0.85)' }}>
                   E-mail
                 </label>
                 <div
-                  className="flex items-center gap-3 px-4 py-3 rounded-xl border transition-all duration-200 focus-within:border-[#1B5E3B] focus-within:shadow-[0_0_0_3px_rgba(27,94,59,0.1)]"
-                  style={{ background: '#F8FAFC', borderColor: '#E2E8F0' }}
+                  className="flex items-center gap-3 px-4 py-3 rounded-xl border transition-all duration-200 focus-within:border-white focus-within:shadow-[0_0_0_3px_rgba(255,255,255,0.2)]"
+                  style={{ background: 'rgba(255,255,255,0.18)', borderColor: 'rgba(255,255,255,0.3)', overflow: 'hidden' }}
                 >
-                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#94A3B8" strokeWidth="1.8" className="flex-shrink-0">
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.6)" strokeWidth="1.8" className="flex-shrink-0">
                     <rect x="2" y="4" width="20" height="16" rx="2.5"/>
                     <path d="M2 8l10 6 10-6"/>
                   </svg>
@@ -245,22 +224,22 @@ export default function Login({
                     placeholder="exemplo@email.com"
                     value={email}
                     onChange={e => setEmail(e.target.value)}
-                    className="flex-1 text-sm bg-transparent focus:outline-none text-left"
-                    style={{ color: '#0F172A' }}
+                    className="login-input flex-1 text-sm focus:outline-none text-left placeholder:text-white/40"
+                    style={{ color: 'white', background: 'transparent', backgroundColor: 'transparent', boxShadow: 'none', caretColor: 'white', colorScheme: 'dark' }}
                   />
                 </div>
               </div>
 
               {/* Senha */}
               <div>
-                <label className="block text-xs font-semibold mb-1.5 text-left" style={{ color: '#374151' }}>
+                <label className="block text-xs font-semibold mb-1.5 text-left" style={{ color: 'rgba(255,255,255,0.85)' }}>
                   Senha
                 </label>
                 <div
-                  className="flex items-center gap-3 px-4 py-3 rounded-xl border transition-all duration-200 focus-within:border-[#1B5E3B] focus-within:shadow-[0_0_0_3px_rgba(27,94,59,0.1)]"
-                  style={{ background: '#F8FAFC', borderColor: '#E2E8F0' }}
+                  className="flex items-center gap-3 px-4 py-3 rounded-xl border transition-all duration-200 focus-within:border-white focus-within:shadow-[0_0_0_3px_rgba(255,255,255,0.2)]"
+                  style={{ background: 'rgba(255,255,255,0.18)', borderColor: 'rgba(255,255,255,0.3)', overflow: 'hidden' }}
                 >
-                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#94A3B8" strokeWidth="1.8" className="flex-shrink-0">
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.6)" strokeWidth="1.8" className="flex-shrink-0">
                     <rect x="3" y="11" width="18" height="11" rx="2.5"/>
                     <path d="M7 11V7a5 5 0 0110 0v4"/>
                   </svg>
@@ -269,39 +248,22 @@ export default function Login({
                     placeholder="••••••••"
                     value={password}
                     onChange={e => setPassword(e.target.value)}
-                    className="flex-1 text-sm bg-transparent focus:outline-none"
-                    style={{ color: '#0F172A' }}
+                    className="login-input flex-1 text-sm focus:outline-none placeholder:text-white/40"
+                    style={{ color: 'white', background: 'transparent', backgroundColor: 'transparent', boxShadow: 'none', caretColor: 'white', colorScheme: 'dark' }}
                   />
-                  <button type="button" onClick={() => setShowPass(!showPass)} className="flex-shrink-0 transition-colors hover:text-slate-600" style={{ color: '#94A3B8' }}>
+                  <button type="button" onClick={() => setShowPass(!showPass)} className="flex-shrink-0 transition-colors" style={{ color: 'rgba(255,255,255,0.6)' }}>
                     {showPass ? <EyeOff size={15} /> : <Eye size={15} />}
                   </button>
                 </div>
               </div>
 
-              {/* Remember + Forgot */}
-              <div className="flex items-center justify-between">
-                <label className="flex items-center gap-2 cursor-pointer select-none" onClick={() => setRemember(!remember)}>
-                  <div
-                    className="flex items-center justify-center rounded transition-all duration-150 flex-shrink-0"
-                    style={{
-                      width: 17, height: 17,
-                      background: remember ? '#1B5E3B' : 'white',
-                      border: `2px solid ${remember ? '#1B5E3B' : '#CBD5E1'}`,
-                    }}
-                  >
-                    {remember && (
-                      <svg width="9" height="9" viewBox="0 0 9 9" fill="none" stroke="white" strokeWidth="2">
-                        <polyline points="1 4.5 3.5 7 8 2"/>
-                      </svg>
-                    )}
-                  </div>
-                  <span className="text-xs font-semibold" style={{ color: '#374151' }}>Lembrar-me</span>
-                </label>
+              {/* Forgot */}
+              <div className="flex items-center justify-end">
                 <button
                   type="button"
                   onClick={onForgotPassword}
                   className="text-xs font-semibold transition-opacity hover:opacity-70"
-                  style={{ color: '#2BB5C8' }}
+                  style={{ color: '#7DDCE8' }}
                 >
                   Esqueci a senha
                 </button>
@@ -350,9 +312,9 @@ export default function Login({
 
             {/* Divider */}
             <div className="flex items-center gap-3 my-3">
-              <div className="flex-1 h-px" style={{ background: '#E2E8F0' }} />
-              <span className="text-[11px] font-medium" style={{ color: '#94A3B8' }}>ou continua com</span>
-              <div className="flex-1 h-px" style={{ background: '#E2E8F0' }} />
+              <div className="flex-1 h-px" style={{ background: 'rgba(255,255,255,0.2)' }} />
+              <span className="text-[11px] font-medium" style={{ color: 'rgba(255,255,255,0.55)' }}>ou continua com</span>
+              <div className="flex-1 h-px" style={{ background: 'rgba(255,255,255,0.2)' }} />
             </div>
 
             {/* Social */}
@@ -375,11 +337,11 @@ export default function Login({
                   key={s.label}
                   whileTap={{ scale: 0.96 }}
                   onClick={s.onClick}
-                  className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl border transition-all hover:bg-slate-50 active:bg-slate-100"
-                  style={{ background: 'white', borderColor: '#E2E8F0' }}
+                  className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl border transition-all"
+                  style={{ background: 'rgba(255,255,255,0.15)', borderColor: 'rgba(255,255,255,0.3)' }}
                 >
                   {s.icon}
-                  <span className="text-xs font-semibold" style={{ color: '#374151' }}>{s.label}</span>
+                  <span className="text-xs font-semibold" style={{ color: 'white' }}>{s.label}</span>
                 </motion.button>
               ))}
             </div>
@@ -387,9 +349,9 @@ export default function Login({
             {/* Criar conta */}
             <div
               className="flex items-center justify-center gap-1.5 pt-3"
-              style={{ borderTop: '1px solid #F1F5F9' }}
+              style={{ borderTop: '1px solid rgba(255,255,255,0.15)' }}
             >
-              <span className="text-xs" style={{ color: '#64748B' }}>Ainda não tens conta?</span>
+              <span className="text-xs" style={{ color: 'rgba(255,255,255,0.6)' }}>Ainda não tens conta?</span>
               <motion.button
                 whileTap={{ scale: 0.97 }}
                 onClick={onRegister}
@@ -400,10 +362,7 @@ export default function Login({
               </motion.button>
             </div>
 
-            {/* Copyright — dentro do card */}
-            <p className="text-center text-[10px] mt-3 font-medium" style={{ color: '#CBD5E1' }}>
-              © 2026 Txopela Tour · Todos os direitos reservados
-            </p>
+
           </div>
         </motion.div>
       </div>

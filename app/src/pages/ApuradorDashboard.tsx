@@ -332,7 +332,7 @@ export default function ApuradorDashboard({
           console.log('[ApuradorDashboard] Tentando carregar serviços...');
           const servicesResult = await usersApi.myServices();
           if (servicesResult.data) {
-            servicesCount = servicesResult.data.services?.length || servicesResult.data.results?.length || 0;
+            servicesCount = servicesResult.data.posts?.length || servicesResult.data.services?.length || servicesResult.data.results?.length || 0;
             console.log('[ApuradorDashboard] Serviços carregados:', servicesCount);
           }
         } catch (err: any) {
@@ -455,7 +455,8 @@ export default function ApuradorDashboard({
                         : Array.isArray(localsRes.data?.results)   ? localsRes.data.results
                         : Array.isArray(localsRes.data)            ? localsRes.data
                         : [];
-      const allServices = Array.isArray(servicesRes.data?.services) ? servicesRes.data.services
+      const allServices = Array.isArray(servicesRes.data?.posts)     ? servicesRes.data.posts
+                        : Array.isArray(servicesRes.data?.services) ? servicesRes.data.services
                         : Array.isArray(servicesRes.data?.results)  ? servicesRes.data.results
                         : Array.isArray(servicesRes.data)           ? servicesRes.data
                         : [];

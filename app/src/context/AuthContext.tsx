@@ -16,6 +16,7 @@ import React, { createContext, useContext, useState, useEffect, useCallback } fr
 import { usersApi } from '@/services/api';
 import { tokenStore } from '@/services/tokenStore';
 import type { User } from '@/types';
+import { clearFollowCache } from '@/hooks/useSuggest';
 
 const getBaseUrl = () => {
   const url = import.meta.env.VITE_API_URL as string | undefined;
@@ -30,7 +31,7 @@ interface AuthContextType {
   isLoading: boolean;
   login:      (email: string, password: string) => Promise<{ ok: boolean; error?: string }>;
   loginLocal: (user: User) => void;
-  register:   (name: string, email: string, password: string, role: string) => Promise<{ ok: boolean; error?: string }>;
+  register:   (name: string, email: string, password: string, role: string, phone?: string, dateOfBirth?: string, extra?: Record<string, unknown>) => Promise<{ ok: boolean; error?: string; emailVerified?: boolean; ambiguous?: boolean }>;
   logout:     () => Promise<void>;
   updateUser: (userData: Partial<User>) => Promise<boolean>;
   refreshUser:(signal?: AbortSignal, silent?: boolean) => Promise<void>;
@@ -74,18 +75,53 @@ function mapApiUser(raw: any): User {
   };
 }
 
+function safeString(val: any): string {
+  if (!val) return '';
+  if (typeof val === 'string') return val;
+  if (Array.isArray(val))      return safeString(val[0]);
+  if (typeof val === 'object') {
+    // { code, details, correlation_id } — formato da API Txopela
+    if (typeof val.details === 'string') return val.details;
+    if (typeof val.detail  === 'string') return val.detail;
+    if (typeof val.message === 'string') return val.message;
+    if (typeof val.error   === 'string') return val.error;
+    // fallback: nunca retornar o objecto raw
+    return '';
+  }
+  return String(val);
+}
+
 function extractError(data: any, status: number): string {
-  if (data.non_field_errors) return Array.isArray(data.non_field_errors) ? data.non_field_errors[0] : data.non_field_errors;
-  if (data.email)    return Array.isArray(data.email)    ? data.email[0]    : data.email;
-  if (data.password) return Array.isArray(data.password) ? data.password[0] : data.password;
-  if (data.name)     return Array.isArray(data.name)     ? data.name[0]     : data.name;
-  if (data.detail)   return data.detail;
-  if (data.error)    return data.error;
-  if (data.message && typeof data.message === 'string') return data.message;
+  if (!data || typeof data !== 'object') {
+    if (status === 409) return 'Este email já está registado.';
+    if (status === 400) return 'Dados inválidos. Verifica os campos.';
+    if (status === 401) return 'Email ou senha incorrectos.';
+    if (status === 403) return 'Sem permissão.';
+    if (status === 429) return 'Demasiadas tentativas. Aguarda uns momentos.';
+    if (status >= 500)  return 'Servidor indisponível. Tenta mais tarde.';
+    return `Erro ${status}.`;
+  }
+
+  // Formato { code, details, correlation_id } — API Txopela Tour
+  if (data.code && data.details) {
+    const details = safeString(data.details);
+    if (details) return details;
+    // mapear códigos conhecidos
+    if (data.code === 'USER_ALREADY_EXISTS' || data.code === 'EMAIL_EXISTS') return 'Este email já está registado.';
+    if (data.code === 'VALIDATION_ERROR')   return 'Dados inválidos. Verifica os campos.';
+    if (data.code === 'INVALID_CREDENTIALS') return 'Email ou senha incorrectos.';
+  }
+
+  const s = safeString(data.non_field_errors) || safeString(data.email) ||
+            safeString(data.password) || safeString(data.name) ||
+            safeString(data.detail)   || safeString(data.error) ||
+            safeString(data.message)  || safeString(data.details);
+  if (s) return s;
+
+  if (status === 409) return 'Este email já está registado.';
   if (status === 400) return 'Dados inválidos. Verifica os campos.';
   if (status === 401) return 'Email ou senha incorrectos.';
   if (status === 403) return 'Sem permissão.';
-  if (status === 409) return 'Este email já está registado.';
   if (status === 429) return 'Demasiadas tentativas. Aguarda uns momentos.';
   if (status >= 500)  return 'Servidor indisponível. Tenta mais tarde.';
   return `Erro ${status}.`;
@@ -214,15 +250,31 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   // ── POST /api/auth/register/ ──────────────────────────────────────────────
   const register = async (
     name: string, email: string, password: string, role: string,
-  ): Promise<{ ok: boolean; error?: string }> => {
-    setLoading(true);
+    phone?: string, dateOfBirth?: string,
+    extra?: Record<string, unknown>,
+  ): Promise<{ ok: boolean; error?: string; emailVerified?: boolean; ambiguous?: boolean }> => {
+    // Nota: NÃO usamos setLoading(true) aqui — isso causaria a tela branca global
+    // no App.tsx. O componente Register.tsx tem o seu próprio estado isLoading local.
     try {
       const ctrl  = new AbortController();
-      const timer = setTimeout(() => ctrl.abort(), 15000);
+      // 45s — servidor Render pode ter cold-start de 20-30s; 15s causava falsos timeouts
+      // com a conta já criada no backend mas o frontend a tratar como erro.
+      const timer = setTimeout(() => ctrl.abort(), 45000);
+      const body: Record<string, unknown> = {
+        name: name.trim(),
+        email: email.trim(),
+        password,
+        role,
+        termsAccepted: true,
+        // Campos adicionais do negócio (extra) — enviados quando role === 'business'
+        ...extra,
+      };
+      if (phone)       body.phone = phone.trim();
+      if (dateOfBirth) body.dateOfBirth = dateOfBirth;
       const res   = await fetch(`${getBaseUrl()}/api/auth/register/`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-        body: JSON.stringify({ name: name.trim(), email: email.trim(), password, role, termsAccepted: true }),
+        body: JSON.stringify(body),
         signal: ctrl.signal,
       });
       clearTimeout(timer);
@@ -231,31 +283,45 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       try { d = await res.json(); } catch { /* empty */ }
       if (!res.ok) return { ok: false, error: extractError(d, res.status) };
 
-      // token e refreshToken estão na raiz, user dentro de data.user
-      const token        = d.token        ?? d.data?.token;
-      const refreshToken = d.refreshToken ?? d.data?.refreshToken;
+      // Resposta real confirmada da API (HTTP 201):
+      // { status, code, data: { user: { id, name, email, role, avatar,
+      //   emailVerified, createdAt, token, refreshToken } }, meta }
+      // Os tokens e os dados do utilizador estão em d.data.user.
+      const userPayload  = d?.data?.user ?? d?.data ?? d?.user;
+      const token        = userPayload?.token        ?? d?.token;
+      const refreshToken = userPayload?.refreshToken ?? d?.refreshToken;
 
-      if (!token || !refreshToken) {
-        return { ok: false, error: 'Resposta inválida do servidor (tokens em falta).' };
+      if (!token || !refreshToken || !userPayload?.id) {
+        // A API respondeu 201 mas sem os campos esperados — erro real, não fallback.
+        return { ok: false, error: 'Resposta inválida do servidor após cadastro. Tenta novamente.' };
       }
 
+      // Guardar tokens em memória (igual ao login)
       tokenStore.set({ token, refreshToken });
 
-      const userData = d.data?.user ?? d.data ?? d.user ?? d;
-      if (userData?.id || userData?.pk || userData?.email) {
-        setUser(mapApiUser(userData));
-      } else {
-        await refreshUser();
-      }
+      // Definir o utilizador com os dados de d.data.user.
+      // NÃO chamar refreshUser em background — evita race condition.
+      setUser(mapApiUser(userPayload));
 
-      return { ok: true };
+      // Propagar emailVerified para que Register.tsx possa decidir o próximo ecrã:
+      //   false → mostrar tela de verificação de e-mail
+      //   true  → conta pronta, navegar para Home
+      const emailVerified: boolean = userPayload?.emailVerified ?? userPayload?.email_verified ?? false;
+      return { ok: true, emailVerified };
     } catch (e: any) {
-      if (e?.name === 'AbortError') return { ok: false, error: 'Tempo de espera esgotado.' };
+      if (e?.name === 'AbortError') {
+        // AbortError após 45s: o servidor pode ter processado o pedido mas a rede
+        // não devolveu a resposta a tempo. Sinalizar como ambíguo para que o
+        // frontend não trate isto como falha definitiva nem repita o cadastro.
+        return {
+          ok: false,
+          ambiguous: true,
+          error: 'A ligação demorou demasiado. A conta pode já ter sido criada — tenta fazer login, ou aguarda e tenta novamente.',
+        };
+      }
       return { ok: false, error: e?.message?.includes('Failed to fetch')
-        ? 'Sem conexão com o servidor.'
-        : 'Erro inesperado.' };
-    } finally {
-      setLoading(false);
+        ? 'Sem conexão com o servidor. Verifica a ligação à internet.'
+        : 'Erro inesperado. Tenta novamente.' };
     }
   };
 
@@ -275,6 +341,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
     } catch { /* logout silencioso */ } finally {
       tokenStore.clear();
+      clearFollowCache();
       setUser(null);
     }
   };

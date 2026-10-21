@@ -5,9 +5,11 @@ import { useTheme } from '@/context/ThemeContext';
 interface BottomNavProps {
   activeTab: TabType;
   onTabChange: (tab: TabType) => void;
+  /** Label dinâmico para o tab 'add' — varia com o role do utilizador */
+  addLabel?: string;
 }
 
-const BLUE  = '#0077B6';
+const BLUE      = '#0077B6';
 const BLUE_DARK = '#38BDF8';
 
 const navItems: { tab: TabType; label: string; icon: (a: boolean, dark: boolean) => ReactElement }[] = [
@@ -88,7 +90,7 @@ const navItems: { tab: TabType; label: string; icon: (a: boolean, dark: boolean)
   },
 ];
 
-export default function BottomNav({ activeTab, onTabChange }: BottomNavProps) {
+export default function BottomNav({ activeTab, onTabChange, addLabel }: BottomNavProps) {
   const { isDark } = useTheme();
 
   return (
@@ -105,28 +107,41 @@ export default function BottomNav({ activeTab, onTabChange }: BottomNavProps) {
           : '1px solid rgba(0,0,0,0.06)',
         fontFamily: 'Inter, sans-serif',
         transition: 'background 0.3s ease, border-color 0.3s ease',
+        /* Evita re-paint durante scroll em dispositivos lentos */
+        willChange: 'transform',
       }}
     >
       <div
-        className="flex items-center justify-around px-1"
-        style={{ paddingBottom: 'max(8px, env(safe-area-inset-bottom))' }}
+        className="flex items-center justify-around"
+        style={{
+          /* pt-1 para espaço acima dos ícones.
+             pb adapta-se ao safe-area do dispositivo:
+             - iPhone com home bar: env() devolve ~34px
+             - Android sem barra: max garante mínimo de 12px */
+          paddingTop: '4px',
+          paddingBottom: 'max(12px, env(safe-area-inset-bottom))',
+          paddingLeft:  'max(4px, env(safe-area-inset-left))',
+          paddingRight: 'max(4px, env(safe-area-inset-right))',
+        }}
       >
         {navItems.map(item => {
-          const active = activeTab === item.tab;
+          const active      = activeTab === item.tab;
           const activeColor = isDark ? BLUE_DARK : BLUE;
           const mutedColor  = isDark ? '#4A5568' : '#94A3B8';
           return (
             <button
               key={item.tab}
               onClick={() => onTabChange(item.tab)}
-              className="flex flex-col items-center gap-0.5 py-2 flex-1"
+              /* min-h-[44px] garante área de toque mínima (Apple HIG / WCAG 2.5.5) */
+              className="flex flex-col items-center gap-0.5 py-1.5 flex-1 min-h-[44px] justify-center"
+              style={{ WebkitTapHighlightColor: 'transparent' }}
             >
               {item.icon(active, isDark)}
               <span
-                className="text-[10px] font-semibold tracking-tight"
+                className="text-[10px] font-semibold tracking-tight leading-none"
                 style={{ color: active ? activeColor : mutedColor }}
               >
-                {item.label}
+                {item.tab === 'add' && addLabel ? addLabel : item.label}
               </span>
             </button>
           );

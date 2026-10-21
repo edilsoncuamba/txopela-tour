@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+﻿import { useState, useEffect } from 'react';
 import { PLACEHOLDER_IMAGE, extractImages, resolveUserType } from '@/utils/dataValidation';
 import { translateServiceCategory, translateUserType } from '@/utils/translations';
 import { motion } from 'framer-motion';
@@ -16,6 +16,7 @@ import { fromApi, hasLocation } from '@/utils/normalizeLocation';
 import ReviewManager from '@/components/ReviewManager';
 import { servicesApi, reviewsApi } from '@/services/api';
 import { useScrollTop } from '@/hooks/useScrollTop';
+import { useSuggest } from '@/hooks/useSuggest';
 
 // ─── Tipos ────────────────────────────────────────────────────────────────────
 
@@ -63,6 +64,20 @@ interface Service {
     type?: string;
     avatar?: string;
   };
+  // Campos novos do formulário
+  subcategory?: string;
+  pricing?: {
+    type: 'fixed' | 'variable' | 'free';
+    amount?: number;
+    currency?: string;
+    details?: string;
+  } | null;
+  availability?: {
+    isAvailable?: boolean;
+    advanceBooking?: number;
+  } | null;
+  features?: string[];
+  requirements?: string[];
 }
 
 export type ServiceData = Service;
@@ -70,11 +85,12 @@ export type ServiceData = Service;
 interface ServiceDetailProps {
   service: Service;
   onBack: () => void;
+  onAuthorPress?: (author: { id: string; name: string; avatar?: string; type: string }) => void;
 }
 
 // ─── Componente principal ─────────────────────────────────────────────────────
 
-export default function ServiceDetail({ service, onBack }: ServiceDetailProps) {
+export default function ServiceDetail({ service, onBack, onAuthorPress }: ServiceDetailProps) {
   useScrollTop();
   const { user } = useAuth();
   const { isFavorite, toggleFavorite } = useFavorites();
@@ -89,13 +105,17 @@ export default function ServiceDetail({ service, onBack }: ServiceDetailProps) {
     input:   isDark ? '#22263A' : '#F8FAFC',
   };
 
-  const [suggested, setSuggested] = useState(false);
   const [galleryPaused, setGalleryPaused] = useState(false);
   const [reviewCount, setReviewCount] = useState(service.reviewsCount || 0);
   const [avgRating, setAvgRating] = useState(service.rating || 0);
 
   // Estado para dados completos do serviço da API
   const [serviceDetails, setServiceDetails] = useState<Service>(service);
+  // Sugerir = seguir o perfil do provider — POST /api/users/{id}/follow/ (OpenAPI)
+  // O provider ID é carregado de serviceDetails.contributor.id (preenchido via raw.provider.id)
+  const providerIdRef = serviceDetails.contributor?.id ?? service.contributor?.id ?? '';
+  const { isSuggested, isLoading: isSuggestLoading, toggle: toggleSuggest, errorMessage: suggestError, isSelf: isSuggestSelf } =
+    useSuggest(providerIdRef || null, false, user?.id);
   const [isLoadingDetails, setIsLoadingDetails] = useState(false);
   // Reviews embutidas vindas do ServiceDetail — campo obrigatório do schema
   const [serviceReviews, setServiceReviews] = useState<any[]>([]);
@@ -147,6 +167,40 @@ export default function ServiceDetail({ service, onBack }: ServiceDetailProps) {
               avatar: raw.provider?.avatar       || raw.author?.avatar || raw.contributor?.avatar || raw.owner?.avatar,
               type:   resolveUserType(raw.provider?.role || raw.provider?.type || raw.author?.type || raw.contributor?.type || raw.owner?.role || raw.owner?.type),
             } : service.contributor,
+            // ── Campos novos ───────────────────────────────────────────────
+            subcategory: raw.subcategory ?? service.subcategory,
+            pricing: (() => {
+              const p = raw.pricing;
+              if (!p) return service.pricing ?? null;
+              if (typeof p === 'string') {
+                try { return JSON.parse(p); } catch { return null; }
+              }
+              return p;
+            })(),
+            availability: (() => {
+              const a = raw.availability;
+              if (!a) return service.availability ?? null;
+              if (typeof a === 'string') {
+                try { return JSON.parse(a); } catch { return null; }
+              }
+              return a;
+            })(),
+            features: (() => {
+              const f = raw.features;
+              if (!f) return service.features ?? [];
+              if (typeof f === 'string') {
+                try { return JSON.parse(f); } catch { return []; }
+              }
+              return Array.isArray(f) ? f : [];
+            })(),
+            requirements: (() => {
+              const r = raw.requirements;
+              if (!r) return service.requirements ?? [];
+              if (typeof r === 'string') {
+                try { return JSON.parse(r); } catch { return []; }
+              }
+              return Array.isArray(r) ? r : [];
+            })(),
           };
 
           setServiceDetails(mappedData);
@@ -250,14 +304,25 @@ export default function ServiceDetail({ service, onBack }: ServiceDetailProps) {
                       <span className="text-white/60 text-[10px]">({reviewCount})</span>
                     </div>
                   </div>
-                  <motion.button whileTap={{ scale: 0.9 }} onClick={() => setSuggested(!suggested)}
+                  {!isSuggestSelf && (
+                  <motion.button
+                    whileTap={{ scale: 0.9 }}
+                    onClick={toggleSuggest}
+                    disabled={isSuggestLoading}
                     className="flex items-center gap-1.5 px-3 py-1.5 rounded-full transition-all"
-                    style={{ background: suggested ? 'rgba(27,94,59,0.9)' : 'rgba(0,0,0,0.35)', backdropFilter: 'blur(8px)' }}>
-                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                    style={{ background: isSuggested ? 'rgba(27,94,59,0.9)' : 'rgba(0,0,0,0.35)', backdropFilter: 'blur(8px)' }}
+                    title={suggestError ?? undefined}
+                    aria-label={isSuggested ? 'Sugerido' : 'Sugerir perfil do autor'}
+                  >
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"
+                      style={{ opacity: isSuggestLoading ? 0.5 : 1 }}>
                       <path d="M22 2L11 13"/><path d="M22 2L15 22 11 13 2 9l20-7z"/>
                     </svg>
-                    <span className="text-white text-[11px] font-bold">{suggested ? 'Sugerido' : 'Sugerir'}</span>
+                    <span className="text-white text-[11px] font-bold">
+                      {isSuggestLoading ? 'Sugerindo…' : isSuggested ? 'Sugerido' : 'Sugerir'}
+                    </span>
                   </motion.button>
+                  )}
                 </div>
               </div>
             </GalleryCarousel>
@@ -286,8 +351,14 @@ export default function ServiceDetail({ service, onBack }: ServiceDetailProps) {
             const type   = c.type || 'business';
             const color  = typeColors[type] || '#7B5EA7';
             const bg     = typeBg[type]     || '#F3E8FF';
+            const hasId  = !!c.id;
             return (
-              <div className="flex items-center gap-2">
+              <button
+                className="flex items-center gap-2 w-full text-left"
+                onClick={() => { if (hasId && onAuthorPress) onAuthorPress({ id: c.id!, name, avatar, type }); }}
+                style={{ cursor: hasId && onAuthorPress ? 'pointer' : 'default' }}
+                aria-label={hasId && onAuthorPress ? `Ver perfil de ${name}` : undefined}
+              >
                 <div className="w-7 h-7 rounded-full flex items-center justify-center text-white text-xs font-black flex-shrink-0 overflow-hidden"
                   style={{ background: `linear-gradient(135deg, ${color}, #2BB5C8)` }}>
                   {avatar
@@ -299,7 +370,7 @@ export default function ServiceDetail({ service, onBack }: ServiceDetailProps) {
                   style={{ background: bg, color }}>
                   {translateUserType(type)}
                 </span>
-              </div>
+              </button>
             );
           })()}
 
@@ -351,6 +422,141 @@ export default function ServiceDetail({ service, onBack }: ServiceDetailProps) {
             })()}
 
           </div>
+
+          {/* ── Preçário ─────────────────────────────────────────────────── */}
+          {serviceDetails.pricing && (
+            <div className="rounded-2xl p-3.5 shadow-sm text-left space-y-3"
+              style={{ background: dm.surface }}>
+              <h2 className="text-xs font-black" style={{ color: dm.text }}>Preçário</h2>
+              <div className="pt-2 border-t flex flex-col gap-2.5" style={{ borderColor: dm.border }}>
+
+                {/* Tipo de preço */}
+                <div className="flex items-center justify-between">
+                  <p className="text-[10px] font-semibold" style={{ color: dm.muted }}>Tipo de preço</p>
+                  <span className="text-xs font-black px-2.5 py-0.5 rounded-full"
+                    style={{
+                      background: serviceDetails.pricing.type === 'fixed'    ? '#EEF7F0'
+                                : serviceDetails.pricing.type === 'variable' ? '#EFF8FF'
+                                : '#F0FDF4',
+                      color:      serviceDetails.pricing.type === 'fixed'    ? '#1B5E3B'
+                                : serviceDetails.pricing.type === 'variable' ? '#0077B6'
+                                : '#16A34A',
+                    }}>
+                    {serviceDetails.pricing.type === 'fixed'    ? 'Preço fixo'
+                   : serviceDetails.pricing.type === 'variable' ? 'Variável'
+                   : 'Gratuito'}
+                  </span>
+                </div>
+
+                {/* Valor */}
+                {serviceDetails.pricing.type !== 'free' && serviceDetails.pricing.amount != null && serviceDetails.pricing.amount > 0 && (
+                  <div className="flex items-center justify-between">
+                    <p className="text-[10px] font-semibold" style={{ color: dm.muted }}>Valor</p>
+                    <p className="text-sm font-black" style={{ color: dm.text }}>
+                      {serviceDetails.pricing.amount.toLocaleString('pt-MZ')}
+                      <span className="text-xs font-bold ml-1" style={{ color: dm.muted }}>
+                        {serviceDetails.pricing.currency ?? 'MZN'}
+                      </span>
+                    </p>
+                  </div>
+                )}
+
+                {/* Detalhes */}
+                {serviceDetails.pricing.details && (
+                  <div className="flex items-start justify-between gap-3">
+                    <p className="text-[10px] font-semibold flex-shrink-0" style={{ color: dm.muted }}>Detalhes</p>
+                    <p className="text-xs font-bold text-right" style={{ color: dm.text2 }}>
+                      {serviceDetails.pricing.details}
+                    </p>
+                  </div>
+                )}
+
+              </div>
+            </div>
+          )}
+
+          {/* ── Disponibilidade ───────────────────────────────────────────── */}
+          {serviceDetails.availability && (
+            <div className="rounded-2xl p-3.5 shadow-sm text-left space-y-3"
+              style={{ background: dm.surface }}>
+              <h2 className="text-xs font-black" style={{ color: dm.text }}>Disponibilidade</h2>
+              <div className="pt-2 border-t flex flex-col gap-2.5" style={{ borderColor: dm.border }}>
+
+                {/* Estado */}
+                {serviceDetails.availability.isAvailable != null && (
+                  <div className="flex items-center justify-between">
+                    <p className="text-[10px] font-semibold" style={{ color: dm.muted }}>Estado</p>
+                    <span className="flex items-center gap-1.5 text-xs font-black px-2.5 py-0.5 rounded-full"
+                      style={{
+                        background: serviceDetails.availability.isAvailable ? '#EEF7F0' : '#F3F4F6',
+                        color:      serviceDetails.availability.isAvailable ? '#1B5E3B' : '#6B7280',
+                      }}>
+                      <span className="w-1.5 h-1.5 rounded-full"
+                        style={{ background: serviceDetails.availability.isAvailable ? '#1B5E3B' : '#9CA3AF' }} />
+                      {serviceDetails.availability.isAvailable ? 'Disponível' : 'Indisponível'}
+                    </span>
+                  </div>
+                )}
+
+                {/* Antecedência mínima */}
+                {serviceDetails.availability.advanceBooking != null && (
+                  <div className="flex items-center justify-between">
+                    <p className="text-[10px] font-semibold" style={{ color: dm.muted }}>Reserva mínima</p>
+                    <p className="text-xs font-bold" style={{ color: dm.text }}>
+                      {serviceDetails.availability.advanceBooking === 0
+                        ? 'Sem antecedência mínima'
+                        : `${serviceDetails.availability.advanceBooking} dia(s) antes`}
+                    </p>
+                  </div>
+                )}
+
+              </div>
+            </div>
+          )}
+
+          {/* ── Características ───────────────────────────────────────────── */}
+          {serviceDetails.features && serviceDetails.features.length > 0 && (
+            <div className="rounded-2xl p-3.5 shadow-sm text-left space-y-3"
+              style={{ background: dm.surface }}>
+              <h2 className="text-xs font-black" style={{ color: dm.text }}>Características incluídas</h2>
+              <div className="pt-2 border-t" style={{ borderColor: dm.border }}>
+                <div className="flex flex-wrap gap-1.5 pt-1">
+                  {serviceDetails.features.map(f => (
+                    <span key={f}
+                      className="flex items-center gap-1 text-xs font-bold px-2.5 py-1 rounded-full"
+                      style={{ background: '#EEF7F0', color: '#1B5E3B' }}>
+                      <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                        <polyline points="20 6 9 17 4 12"/>
+                      </svg>
+                      {f}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* ── Requisitos ────────────────────────────────────────────────── */}
+          {serviceDetails.requirements && serviceDetails.requirements.length > 0 && (
+            <div className="rounded-2xl p-3.5 shadow-sm text-left space-y-3"
+              style={{ background: dm.surface }}>
+              <h2 className="text-xs font-black" style={{ color: dm.text }}>Requisitos para o cliente</h2>
+              <div className="pt-2 border-t" style={{ borderColor: dm.border }}>
+                <div className="flex flex-wrap gap-1.5 pt-1">
+                  {serviceDetails.requirements.map(r => (
+                    <span key={r}
+                      className="flex items-center gap-1 text-xs font-bold px-2.5 py-1 rounded-full"
+                      style={{ background: '#F3EEFB', color: '#7B5EA7' }}>
+                      <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                        <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
+                      </svg>
+                      {r}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* Contactos */}
           {(serviceDetails.telefone || serviceDetails.whatsapp || serviceDetails.email) && (

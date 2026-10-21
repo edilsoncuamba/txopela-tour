@@ -59,6 +59,11 @@ import type {
   LikeResponse, SaveResponse, CommentLikeResponse,
   FollowResponse, ReviewHelpfulResponse, MarkReadResponse,
   AvatarUploadResponse,
+  // Email verification & password recovery (OpenAPI v2.1.0)
+  VerifyEmailRequest, EmailVerificationResponse,
+  ResendVerificationRequest, ResendVerificationResponse,
+  RequestPasswordResetRequest, RequestPasswordResetResponse,
+  PasswordResetRequest, PasswordResetResponse,
 } from '@/types/api';
 
 import { backendConfig } from '@/config/backend';
@@ -127,7 +132,22 @@ async function apiFetch<T>(
       tokenStore.clear();
       return { error: 'Sessão expirada. Faz login novamente.' };
     }
-    if (res.status === 403) return { error: 'Sem permissão para esta operação.' };
+    if (res.status === 403) {
+      // Breaking Changes v2.1.0: o 403 pode conter dados estruturados de upgrade
+      // { status, code, data: { error, detail, current_role, allowed_roles, action_required, upgrade_steps } }
+      try {
+        const raw403 = await res.json();
+        const d = raw403?.data ?? raw403;
+        if (d?.detail || d?.action_required) {
+          // Devolve o objecto completo de 403 para que o caller possa mostrar modal de upgrade
+          return {
+            error: d.detail ?? d.error ?? 'Permissão negada',
+            data: d as T,
+          };
+        }
+      } catch { /* corpo sem JSON — usar mensagem genérica */ }
+      return { error: 'Sem permissão para esta operação.' };
+    }
     if (res.status === 404) return { error: 'Recurso não encontrado.' };
     if (res.status === 204) return { data: undefined as T };
 
@@ -206,6 +226,19 @@ async function apiMultipart<T>(
       if (ok) return apiMultipart(endpoint, method, fd, false);
       tokenStore.clear();
       return { error: 'Sessão expirada. Faz login novamente.' };
+    }
+
+    if (res.status === 403) {
+      // Breaking Changes v2.1.0: o 403 pode conter dados estruturados de upgrade
+      // { status, code, data: { detail, current_role, action_required, ... } }
+      try {
+        const raw403 = await res.json();
+        const d = raw403?.data ?? raw403;
+        if (d?.detail || d?.action_required) {
+          return { error: d.detail ?? d.error ?? 'Permissão negada', data: d as T };
+        }
+      } catch { /* corpo sem JSON — usar mensagem genérica */ }
+      return { error: 'Sem permissão para esta operação.' };
     }
 
     if (!res.ok) {
@@ -326,6 +359,62 @@ export const authApi = {
     apiFetch<UserProfile>('/api/auth/me/', { method: 'PUT', body: JSON.stringify(body) }),
   patchMe: (body: Partial<UserProfileRequest>) =>
     apiFetch<UserProfile>('/api/auth/me/', { method: 'PATCH', body: JSON.stringify(body) }),
+
+  /**
+   * POST /api/auth/verify-email/
+   * body: { token }   ← token recebido no link de e-mail (?token=XXXXX)
+   * 200: EmailVerificationResponse { success, message, email_verified }
+   * 400: Token inválido ou expirado
+   * Não requer autenticação.
+   */
+  verifyEmail: (body: VerifyEmailRequest) =>
+    apiFetch<EmailVerificationResponse>('/api/auth/verify-email/', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+
+  /**
+   * POST /api/auth/resend-verification/
+   * body: { email }
+   * 200: ResendVerificationResponse { success, message }
+   * 400: Email já verificado ou não encontrado
+   * Não requer autenticação.
+   */
+  resendVerification: (body: ResendVerificationRequest) =>
+    apiFetch<ResendVerificationResponse>('/api/auth/resend-verification/', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+
+  /**
+   * POST /api/auth/request-password-reset/
+   * body: { email }
+   * 200: RequestPasswordResetResponse { success, message }
+   * Segurança: retorna sempre 200, mesmo que o e-mail não exista.
+   * Não requer autenticação.
+   */
+  requestPasswordReset: (body: RequestPasswordResetRequest) =>
+    apiFetch<RequestPasswordResetResponse>('/api/auth/request-password-reset/', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+
+  /**
+   * POST /api/auth/reset-password/
+   * body: { token, password, password_confirm }
+   *   token:            string (do link de e-mail, ?token=XXXXX) — válido 1 hora
+   *   password:         string (min. 8 caracteres)
+   *   password_confirm: string (deve coincidir com password)
+   * 200: PasswordResetResponse { success, message }
+   * 400: Token inválido ou expirado
+   * Não faz login automático — não devolve tokens JWT.
+   * Não requer autenticação.
+   */
+  resetPassword: (body: PasswordResetRequest) =>
+    apiFetch<PasswordResetResponse>('/api/auth/reset-password/', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1103,36 +1192,46 @@ export const adminApi = {
 // ─────────────────────────────────────────────────────────────────────────────
 export const favoritesApi = {
   /**
-   * Carrega posts guardados do utilizador autenticado.
-   * Apenas posts têm userInteraction.hasSaved no schema.
-   * Locais e serviços não têm endpoint GET /saved/ — estado gerido via toggle.
-   */
-  /**
-   * Carrega posts guardados do utilizador autenticado.
-   * PostList tem userInteraction.hasSaved (confirmado no schema).
-   * A API envolve em { status, code, data, meta } — apiFetch já extrai data.
-   * Paginação está em meta.pagination (confirmado nos testes ao vivo).
-   * Locais e serviços NÃO têm userInteraction — sem endpoint GET /saved/.
+   * Carrega todos os posts guardados (hasSaved=true) do utilizador autenticado.
+   *
+   * Schema(5): GET /api/posts/ — PostList tem userInteraction.hasSaved.
+   * Não existe endpoint dedicado GET /api/posts/saved/ nem query param saved=true.
+   * Estratégia: paginar com limit=50 até receber menos de 50 itens (fim da lista).
+   * Máximo de 10 páginas (500 posts) para evitar loops infinitos.
+   *
+   * apiFetch já extrai o campo `.data` do envelope { status, code, data, meta },
+   * por isso `meta.pagination` não está acessível — usamos items.length < limit
+   * como critério de fim de paginação (comportamento correto e sem dependência de meta).
+   *
+   * Locais e serviços NÃO têm userInteraction nem endpoint GET /saved/ no schema(5).
+   * O seu estado é gerido pelo FavoritesContext durante a sessão via toggle.
    */
   getSavedPosts: async (): Promise<any[]> => {
+    const LIMIT = 50;
+    const MAX_PAGES = 10;
     const saved: any[] = [];
-    let page = 1;
-    let hasMore = true;
-    while (hasMore && page <= 20) {
-      const res = await apiFetch<any>(`/api/posts/?sortBy=recent&limit=50&page=${page}`);
+
+    for (let page = 1; page <= MAX_PAGES; page++) {
+      const res = await apiFetch<any>(
+        `/api/posts/?sortBy=recent&limit=${LIMIT}&page=${page}`,
+      );
+      // Erro de rede ou API — parar silenciosamente, não lançar
       if (res.error || !res.data) break;
-      // apiFetch extrai o campo .data do envelope — raw é o conteúdo de data
-      const raw = res.data;
-      const items: any[] = Array.isArray(raw) ? raw : (raw.posts ?? raw.results ?? []);
-      items.forEach((p: any) => {
-        if (p.userInteraction?.hasSaved === true) saved.push(p);
-      });
-      // Paginação confirmada ao vivo: vem em meta.pagination dentro do envelope
-      // apiFetch devolve só o .data, por isso precisamos de aceder via res diretamente
-      // Usamos o tamanho da lista como heurística segura
-      hasMore = items.length === 50;
-      page++;
+
+      const raw   = res.data;
+      const items: any[] = Array.isArray(raw)
+        ? raw
+        : (raw.posts ?? raw.results ?? []);
+
+      // Recolher apenas os posts que o utilizador guardou
+      for (const p of items) {
+        if (p?.userInteraction?.hasSaved === true) saved.push(p);
+      }
+
+      // Menos de LIMIT itens → última página, parar
+      if (items.length < LIMIT) break;
     }
+
     return saved;
   },
 

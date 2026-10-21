@@ -1,678 +1,428 @@
+/**
+ * ForgotPassword.tsx
+ *
+ * Fluxo real conforme OpenAPI v2.1.0 — dois passos:
+ *
+ *  Passo 1 — "email":
+ *    POST /api/auth/request-password-reset/ { email }
+ *    A API retorna sempre 200, mesmo que o e-mail não exista (segurança).
+ *
+ *  Passo 2 — "reset" (activado pelo link no e-mail):
+ *    POST /api/auth/reset-password/ { token, password, password_confirm }
+ *    Token válido por 1 hora. Após reset bem-sucedido, redireciona para login.
+ */
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Mail, ArrowRight, ChevronLeft, CheckCircle, Lock, AlertCircle, Eye, EyeOff } from 'lucide-react';
+import {
+  Mail, ArrowRight, CheckCircle,
+  Lock, AlertCircle, Eye, EyeOff, Loader2,
+} from 'lucide-react';
+import { authApi } from '@/services/api';
 import { useScrollTop } from '@/hooks/useScrollTop';
+import AuthPageLayout from '@/components/shared/AuthPageLayout';
+import {
+  AuthField, AuthErrorMessage,
+  AUTH_CARD_ROUNDED_TOP,
+  IconEmail, IconLock,
+} from '@/components/shared/AuthFieldWrapper';
 
 interface ForgotPasswordProps {
   onBack: () => void;
 }
 
-// Slides de destinos mo�ambicanos para o fundo
-const slides = [
-  {
-    image: '/images/provincias_profile/inhambane.jpeg',
-    province: 'Inhambane',
-    caption: 'Arquip�lago do Bazaruto',
-  },
-  {
-    image: '/images/provincias_profile/nampula.jpeg',
-    province: 'Nampula',
-    caption: 'Ilha de Mo�ambique',
-  },
-  {
-    image: '/images/provincias_profile/maputo_provicnia.jpeg',
-    province: 'Maputo',
-    caption: 'Ponta de Ouro',
-  },
-  {
-    image: '/images/provincias_profile/tete.jpg',
-    province: 'Tete',
-    caption: 'Cahora Bassa',
-  },
-];
+type Step = 'email' | 'email_sent' | 'reset' | 'success';
 
-type PasswordRecoveryStep = 'email' | 'code' | 'reset' | 'success';
-
-function LoadingDots() {
-  return (
-    <div className="flex items-center justify-center gap-1">
-      <motion.span className="w-2 h-2 bg-white rounded-full" animate={{ opacity: [0.3, 1, 0.3] }} transition={{ duration: 1.5, repeat: Infinity }} />
-      <motion.span className="w-2 h-2 bg-white rounded-full" animate={{ opacity: [0.3, 1, 0.3] }} transition={{ duration: 1.5, repeat: Infinity, delay: 0.2 }} />
-      <motion.span className="w-2 h-2 bg-white rounded-full" animate={{ opacity: [0.3, 1, 0.3] }} transition={{ duration: 1.5, repeat: Infinity, delay: 0.4 }} />
-    </div>
-  );
+function readTokenFromUrl(): string | null {
+  try {
+    const search =
+      window.location.search ||
+      (window.location.hash.includes('?')
+        ? '?' + window.location.hash.split('?')[1]
+        : '');
+    return new URLSearchParams(search).get('token');
+  } catch {
+    return null;
+  }
 }
 
-export default function ForgotPassword({
-  onBack }: ForgotPasswordProps) {
-  useScrollTop();
-  const [step, setStep] = useState<PasswordRecoveryStep>('email');
-  const [slide, setSlide] = useState(0);
-  const [email, setEmail] = useState('');
-  const [code, setCode] = useState('');
-  const [newPassword, setNewPassword] = useState('');
-  const [confirmPassword, setConfirmPassword] = useState('');
-  const [showPassword, setShowPassword] = useState(false);
-  const [showConfirm, setShowConfirm] = useState(false);
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState('');
+function passStrength(p: string): number {
+  let s = 0;
+  if (p.length >= 8)          s++;
+  if (/[A-Z]/.test(p))        s++;
+  if (/[0-9]/.test(p))        s++;
+  if (/[^A-Za-z0-9]/.test(p)) s++;
+  return s;
+}
+const strengthColors = ['#E5E7EB', '#EF4444', '#F59E0B', '#3B82F6', '#22C55E'];
+const strengthLabels = ['', 'Fraca', 'Razoável', 'Boa', 'Forte'];
 
-  // Auto-rotate background slides
-  useEffect(() => {
-    const t = setInterval(() => setSlide(s => (s + 1) % slides.length), 5000);
-    return () => clearInterval(t);
-  }, []);
+// ── Estilo do card ────────────────────────────────────────────────────────────
+const CARD: React.CSSProperties = {
+  background: 'rgba(255,255,255,0.18)',
+  backdropFilter: 'blur(28px)',
+  WebkitBackdropFilter: 'blur(28px)',
+  boxShadow: '0 -8px 40px rgba(0,0,0,0.18), inset 0 1px 0 rgba(255,255,255,0.35)',
+  border: '1px solid rgba(255,255,255,0.25)',
+  borderBottom: 'none',
+};
+
+// ── Componente ────────────────────────────────────────────────────────────────
+export default function ForgotPassword({ onBack }: ForgotPasswordProps) {
+  useScrollTop();
+
+  const [step,      setStep]      = useState<Step>(() => readTokenFromUrl() ? 'reset' : 'email');
+  const [isLoading, setIsLoading] = useState(false);
+  const [error,     setError]     = useState('');
+
+  // Passo 1
+  const [email, setEmail] = useState('');
+
+  // Passo 2
+  const [token,           setToken]           = useState(() => readTokenFromUrl() ?? '');
+  const [password,        setPassword]        = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [showPassword,    setShowPassword]    = useState(false);
+  const [showConfirm,     setShowConfirm]     = useState(false);
+
+  // ── Passo 1: solicitar reset ───────────────────────────────────────────────
   const handleEmailSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
-
-    if (!email.trim()) {
-      setError('Email � obrigat�rio');
-      return;
-    }
+    const trimmed = email.trim();
+    if (!trimmed) { setError('O e-mail é obrigatório.'); return; }
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(trimmed)) { setError('Insere um e-mail válido.'); return; }
 
     setIsLoading(true);
-    try {
-      // Simular chamada � API
-      await new Promise(resolve => setTimeout(resolve, 1500));
-      setStep('code');
-    } catch (err) {
-      setError('Erro ao enviar email. Tente novamente.');
-    } finally {
-      setIsLoading(false);
+    const res = await authApi.requestPasswordReset({ email: trimmed });
+    setIsLoading(false);
+
+    if (res.data || !res.error) {
+      setStep('email_sent');
+    } else {
+      setError(res.error ?? 'Erro ao enviar o pedido. Tenta novamente.');
     }
   };
 
-  const handleCodeSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setError('');
-
-    if (!code.trim()) {
-      setError('C�digo � obrigat�rio');
-      return;
-    }
-
-    setIsLoading(true);
-    try {
-      // Simular chamada � API
-      await new Promise(resolve => setTimeout(resolve, 1500));
-      setStep('reset');
-    } catch (err) {
-      setError('C�digo inv�lido. Tente novamente.');
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
+  // ── Passo 2: redefinir senha ───────────────────────────────────────────────
   const handleResetSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
-
-    if (newPassword.length < 8) {
-      setError('Senha deve ter no m�nimo 8 caracteres');
-      return;
-    }
-
-    if (newPassword !== confirmPassword) {
-      setError('Senhas n�o conferem');
-      return;
-    }
+    if (!token)              { setError('Token de recuperação em falta. Usa o link recebido no e-mail.'); return; }
+    if (password.length < 8) { setError('A senha deve ter no mínimo 8 caracteres.'); return; }
+    if (password !== confirmPassword) { setError('As senhas não coincidem.'); return; }
 
     setIsLoading(true);
-    try {
-      // Simular chamada � API
-      await new Promise(resolve => setTimeout(resolve, 1500));
+    const res = await authApi.resetPassword({ token, password, password_confirm: confirmPassword });
+    setIsLoading(false);
+
+    if (res.data?.success) {
       setStep('success');
-    } catch (err) {
-      setError('Erro ao redefinir senha. Tente novamente.');
-    } finally {
-      setIsLoading(false);
+    } else {
+      const msg = res.error || (res.data ? res.data.message : '') || 'Token inválido ou expirado. Solicita um novo link.';
+      setError(msg);
     }
   };
 
-  const handleBack = () => {
-    if (step === 'email') {
-      onBack();
-    } else if (step === 'code') {
-      setStep('email');
-    } else if (step === 'reset') {
-      setStep('code');
-    }
-  };
+  const strength = passStrength(password);
 
-  const current = slides[slide];
-  // Tela de sucesso
+  // ── Sucesso ───────────────────────────────────────────────────────────────
   if (step === 'success') {
     return (
-      <div
-        className="h-screen w-full relative flex items-center justify-center overflow-hidden"
-        style={{ fontFamily: 'Inter, Nunito, sans-serif' }}
-      >
-        {/* Background slideshow */}
-        <AnimatePresence mode="sync">
-          <motion.img
-            key={current.image}
-            src={current.image}
-            alt={current.caption}
-            className="absolute inset-0 w-full h-full object-cover object-center"
-            initial={{ opacity: 0, scale: 1.04 }}
-            animate={{ opacity: 1, scale: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 1.2, ease: 'easeInOut' }}
-          />
-        </AnimatePresence>
-
-        {/* Overlays */}
-        <div className="absolute inset-0" style={{
-          background: 'linear-gradient(105deg, rgba(5,30,15,0.82) 0%, rgba(5,30,15,0.60) 45%, rgba(5,20,10,0.45) 100%)',
-        }} />
-        <div className="absolute inset-0" style={{
-          background: 'radial-gradient(ellipse at center, transparent 40%, rgba(0,0,0,0.45) 100%)',
-        }} />
-
-        {/* Success content */}
-        <motion.div
-          initial={{ opacity: 0, y: 28, scale: 0.96 }}
-          animate={{ opacity: 1, y: 0, scale: 1 }}
-          transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
-          className="w-full max-w-md mx-5"
-        >
-          <div
-            className="rounded-3xl px-6 py-6 text-center"
-            style={{
-              background: 'rgba(255,255,255,0.97)',
-              backdropFilter: 'blur(32px)',
-              boxShadow: '0 32px 80px rgba(0,0,0,0.3), 0 4px 20px rgba(0,0,0,0.15), inset 0 1px 0 rgba(255,255,255,0.8)',
-            }}
-          >
-            <motion.div
-              initial={{ scale: 0 }}
-              animate={{ scale: 1 }}
-              transition={{ type: 'spring', stiffness: 200, delay: 0.2 }}
-              className="w-20 h-20 mx-auto mb-6 rounded-full flex items-center justify-center"
-              style={{ background: 'linear-gradient(135deg, #22C55E, #16A34A)' }}
-            >
-              <CheckCircle size={40} className="text-white" />
-            </motion.div>
-
-            <motion.h2
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.3 }}
-              className="text-2xl font-black mb-3"
-              style={{ color: '#0F172A', letterSpacing: '-0.025em' }}
-            >
-              Senha redefinida!
-            </motion.h2>
-
-            <motion.p
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.4 }}
-              className="text-sm mb-8"
-              style={{ color: '#64748B', lineHeight: 1.5 }}
-            >
-              Sua senha foi redefinida com sucesso. Voc� pode fazer login com sua nova senha.
-            </motion.p>
-
-            <motion.button
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              transition={{ delay: 0.5 }}
-              whileTap={{ scale: 0.98 }}
-              onClick={onBack}
-              className="w-full py-3.5 rounded-xl text-white font-black text-sm transition-all"
-              style={{
-                background: 'linear-gradient(135deg, #0F4C2A 0%, #1B7A45 100%)',
-                boxShadow: '0 4px 18px rgba(15,76,42,0.38)',
-                letterSpacing: '0.01em',
-              }}
-            >
-              Voltar para o login
-            </motion.button>
-          </div>
-        </motion.div>
-      </div>
-    );
-  }
-  return (
-    <div
-      className="h-screen w-full relative flex items-center justify-center overflow-hidden"
-      style={{ fontFamily: 'Inter, Nunito, sans-serif' }}
-    >
-      {/* Background slideshow */}
-      <AnimatePresence mode="sync">
-        <motion.img
-          key={current.image}
-          src={current.image}
-          alt={current.caption}
-          className="absolute inset-0 w-full h-full object-cover object-center"
-          initial={{ opacity: 0, scale: 1.04 }}
-          animate={{ opacity: 1, scale: 1 }}
-          exit={{ opacity: 0 }}
-          transition={{ duration: 1.2, ease: 'easeInOut' }}
-        />
-      </AnimatePresence>
-
-      {/* Overlays */}
-      <div className="absolute inset-0" style={{
-        background: 'linear-gradient(105deg, rgba(5,30,15,0.82) 0%, rgba(5,30,15,0.60) 45%, rgba(5,20,10,0.45) 100%)',
-      }} />
-      <div className="absolute inset-0" style={{
-        background: 'radial-gradient(ellipse at center, transparent 40%, rgba(0,0,0,0.45) 100%)',
-      }} />
-
-      {/* Logo */}
-      <div className="absolute top-8 left-10 hidden md:flex items-center gap-2.5 z-20">
+      <AuthPageLayout centeredCard>
         <div
-          className="w-11 h-11 rounded-2xl overflow-hidden flex-shrink-0"
+          className="rounded-3xl px-6 py-8 text-center"
           style={{
-            background: 'rgba(255,255,255,0.95)',
-            backdropFilter: 'blur(12px)',
-            WebkitBackdropFilter: 'blur(12px)',
-            boxShadow: '0 4px 20px rgba(0,0,0,0.15), 0 0 0 1px rgba(255,255,255,0.6), inset 0 1px 0 rgba(255,255,255,1)',
-            padding: 4,
+            background: 'rgba(255,255,255,0.18)',
+            backdropFilter: 'blur(28px)',
+            WebkitBackdropFilter: 'blur(28px)',
+            border: '1px solid rgba(255,255,255,0.25)',
+            boxShadow: '0 32px 80px rgba(0,0,0,0.3)',
           }}
         >
-          <img src="/images/Logo2.png" alt="Txopela Tour" className="w-full h-full object-contain" />
-        </div>
-        <span className="font-black text-[15px] text-white leading-none block"
-          style={{ fontFamily: 'Pacifico, cursive', textShadow: '0 1px 8px rgba(0,0,0,0.5)' }}>
-          Txopela Tour
-        </span>
-      </div>
-
-      {/* Slide indicators */}
-      <div className="absolute bottom-6 left-6 md:bottom-10 md:left-10 z-20">
-        <div className="flex items-center gap-2 mb-2 justify-start">
-          {slides.map((_, i) => (
-            <button
-              key={i}
-              onClick={() => setSlide(i)}
-              className="transition-all duration-300"
-              style={{
-                width: i === slide ? 24 : 6,
-                height: 6,
-                borderRadius: 3,
-                background: i === slide ? 'white' : 'rgba(255,255,255,0.35)',
-              }}
-            />
-          ))}
-        </div>
-        <AnimatePresence mode="wait">
           <motion.div
-            key={slide}
-            initial={{ opacity: 0, y: 6 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -6 }}
-            transition={{ duration: 0.4 }}
+            initial={{ scale: 0 }}
+            animate={{ scale: 1 }}
+            transition={{ type: 'spring', stiffness: 200, delay: 0.2 }}
+            className="w-20 h-20 mx-auto mb-6 rounded-full flex items-center justify-center"
+            style={{ background: 'linear-gradient(135deg, #22C55E, #16A34A)' }}
           >
-            <p className="text-sm font-bold text-white text-left" style={{ textShadow: '0 1px 6px rgba(0,0,0,0.6)' }}>{current.caption}</p>
-            <p className="text-xs font-medium text-left" style={{ color: 'rgba(255,255,255,0.65)' }}>
-              {current.province}, Mo�ambique
-            </p>
+            <CheckCircle size={40} className="text-white" />
           </motion.div>
-        </AnimatePresence>
-      </div>
-      {/* Conte�do principal */}
-      <div className="relative z-10 w-full h-full flex flex-col lg:flex-row items-center justify-center lg:justify-between px-5 md:px-10 lg:px-16 xl:px-24 gap-8 lg:gap-12">
 
-        {/* Lado esquerdo - copy (desktop only) */}
-        <div className="hidden lg:flex flex-col max-w-sm xl:max-w-md flex-shrink-0" style={{ marginBottom: '4rem' }}>
-          <h1 className="font-black leading-[1.05]"
-            style={{ fontSize: 'clamp(2.4rem, 3.5vw, 3.2rem)', color: 'white',
-              letterSpacing: '-0.03em', textShadow: '0 2px 20px rgba(0,0,0,0.3)' }}>
-            Explore o melhor<br />
-            <span style={{ background: 'linear-gradient(90deg, #2BB5C8, #43E8A0)',
-              WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>
-              de Mo�ambique.
-            </span>
-          </h1>
-        </div>
+          <motion.h2
+            initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }}
+            className="text-2xl font-black mb-3" style={{ color: 'white', letterSpacing: '-0.025em' }}
+          >
+            Senha redefinida!
+          </motion.h2>
 
-        {/* Card do formul�rio */}
-        <motion.div
-          initial={{ opacity: 0, y: 28, scale: 0.96 }}
-          animate={{ opacity: 1, y: 0, scale: 1 }}
-          transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
-          className="w-full flex-shrink-0"
-          style={{ maxWidth: 420 }}
-        >
-          <div
-            className="rounded-3xl px-6 py-4 md:px-8 md:py-5"
+          <motion.p
+            initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.4 }}
+            className="text-sm mb-8 leading-relaxed" style={{ color: 'rgba(255,255,255,0.7)' }}
+          >
+            A tua senha foi redefinida com sucesso. Podes fazer login com a nova senha.
+          </motion.p>
+
+          <motion.button
+            initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.5 }}
+            whileTap={{ scale: 0.98 }}
+            onClick={onBack}
+            className="w-full py-3.5 rounded-xl text-white font-black text-sm transition-all"
             style={{
-              background: 'rgba(255,255,255,0.97)',
-              backdropFilter: 'blur(32px)',
-              boxShadow: '0 32px 80px rgba(0,0,0,0.3), 0 4px 20px rgba(0,0,0,0.15), inset 0 1px 0 rgba(255,255,255,0.8)',
+              background: 'linear-gradient(135deg, #0F4C2A 0%, #1B7A45 100%)',
+              boxShadow: '0 4px 18px rgba(15,76,42,0.38)',
+              letterSpacing: '0.01em',
             }}
           >
-            {/* Back button */}
-            {step !== 'email' && (
-              <div className="mb-4">
-                <button onClick={handleBack}
-                  className="flex items-center gap-1 text-xs font-semibold transition-opacity hover:opacity-70"
-                  style={{ color: '#64748B' }}>
-                  <ChevronLeft size={14} /> Voltar
-                </button>
-              </div>
-            )}
+            Fazer login
+          </motion.button>
+        </div>
+      </AuthPageLayout>
+    );
+  }
 
-            {/* Progress indicator */}
-            <div className="mb-6">
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-xs font-semibold" style={{ color: '#374151' }}>
-                  Etapa {step === 'email' ? 1 : step === 'code' ? 2 : 3} de 3
-                </span>
-                <span className="text-xs font-semibold" style={{ color: '#1B5E3B' }}>
-                  {step === 'email' ? '33%' : step === 'code' ? '66%' : '100%'}
-                </span>
+  return (
+    <AuthPageLayout>
+
+      {/* Card */}
+      <div className="rounded-t-3xl lg:rounded-3xl px-6 py-6 md:px-8 md:py-7" style={CARD}>
+        <AnimatePresence mode="wait">
+
+          {/* ── Passo 1: E-mail ───────────────────────────────────────────── */}
+          {step === 'email' && (
+            <motion.div key="email"
+              initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 6 }}
+              transition={{ duration: 0.2, ease: 'easeOut' }}
+            >
+              <div className="mb-5">
+                <div className="flex items-center gap-2 mb-1">
+                  <div className="w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0"
+                    style={{ background: 'linear-gradient(135deg, #0F4C2A, #1B7A45)' }}>
+                    <Mail size={13} color="white" strokeWidth={2.2} />
+                  </div>
+                  <h2 className="font-black" style={{ fontSize: '1.35rem', color: 'white', letterSpacing: '-0.025em', textShadow: '0 1px 8px rgba(0,0,0,0.3)' }}>
+                    Esqueceu a senha?
+                  </h2>
+                </div>
+                <p className="text-sm mt-1" style={{ color: 'rgba(255,255,255,0.65)', lineHeight: 1.5 }}>
+                  Insere o teu e-mail e enviamos um link para redefinires a senha.
+                </p>
               </div>
-              <div className="h-1 bg-gray-100 rounded-full overflow-hidden">
-                <motion.div
-                  className="h-full rounded-full"
-                  style={{ background: 'linear-gradient(90deg, #1B5E3B, #22C55E)' }}
-                  initial={{ width: '33%' }}
-                  animate={{ width: step === 'email' ? '33%' : step === 'code' ? '66%' : '100%' }}
-                  transition={{ duration: 0.5, ease: 'easeInOut' }}
+
+              <form onSubmit={handleEmailSubmit} className="space-y-3">
+                <AuthField
+                  label="E-mail"
+                  icon={<IconEmail />}
+                  type="email"
+                  placeholder="exemplo@email.com"
+                  value={email}
+                  onChange={e => setEmail(e.target.value)}
+                  autoComplete="email"
+                  required
                 />
+
+                <AnimatePresence>
+                  {error && (
+                    <motion.div key="err"
+                      initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }}
+                      className="overflow-hidden">
+                      <AuthErrorMessage message={error} />
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+
+                <motion.button type="submit" disabled={isLoading} whileTap={{ scale: 0.98 }}
+                  className="w-full py-3.5 rounded-xl text-white font-black text-sm mt-2 transition-all disabled:opacity-60 flex items-center justify-center gap-2"
+                  style={{ background: 'linear-gradient(135deg, #0F4C2A 0%, #1B7A45 100%)', boxShadow: '0 4px 18px rgba(15,76,42,0.38)', letterSpacing: '0.01em' }}>
+                  {isLoading ? <Loader2 size={16} className="animate-spin" /> : <ArrowRight size={16} />}
+                  {isLoading ? 'A enviar…' : 'Enviar link de recuperação'}
+                </motion.button>
+              </form>
+
+              <div className="flex items-center justify-center gap-1.5 pt-4 mt-4"
+                style={{ borderTop: '1px solid rgba(255,255,255,0.15)' }}>
+                <span className="text-xs" style={{ color: 'rgba(255,255,255,0.6)' }}>Lembrou da senha?</span>
+                <motion.button whileTap={{ scale: 0.97 }} onClick={onBack}
+                  className="text-xs font-black transition-opacity hover:opacity-75"
+                  style={{ color: '#F4821F' }}>
+                  Fazer login →
+                </motion.button>
               </div>
-            </div>
+            </motion.div>
+          )}
 
-            <AnimatePresence mode="wait">
-              {/* Step 1: Email */}
-              {step === 'email' && (
-                <motion.div key="email"
-                  initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: 6 }} transition={{ duration: 0.2, ease: 'easeOut' }}>
-                  
-                  {/* Header */}
-                  <div className="mb-5">
-                    <div className="flex items-center gap-2 mb-1">
-                      <div className="w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0"
-                        style={{ background: 'linear-gradient(135deg, #0F4C2A, #1B7A45)' }}>
-                        <Mail size={13} color="white" strokeWidth={2.2} />
-                      </div>
-                      <h2 className="font-black" style={{ fontSize: '1.35rem', color: '#0F172A', letterSpacing: '-0.025em' }}>
-                        Esqueceu sua senha?
-                      </h2>
-                    </div>
+          {/* ── Passo 1b: Link enviado ────────────────────────────────────── */}
+          {step === 'email_sent' && (
+            <motion.div key="email_sent"
+              initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 6 }}
+              transition={{ duration: 0.2, ease: 'easeOut' }}
+              className="flex flex-col items-center text-center gap-4 py-2"
+            >
+              <div className="w-16 h-16 rounded-full flex items-center justify-center"
+                style={{ background: 'rgba(37,99,235,0.2)', border: '1px solid rgba(37,99,235,0.3)' }}>
+                <Mail size={30} style={{ color: '#60A5FA' }} />
+              </div>
+              <h2 className="font-black text-xl" style={{ color: 'white', letterSpacing: '-0.025em' }}>
+                Verifica o teu e-mail
+              </h2>
+              <p className="text-sm leading-relaxed" style={{ color: 'rgba(255,255,255,0.7)' }}>
+                Se <span className="font-bold text-white">{email}</span> estiver registado, receberás um link para redefinires a senha nos próximos minutos.
+              </p>
 
+              <div className="w-full rounded-2xl p-4 text-left"
+                style={{ background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.15)' }}>
+                <p className="text-xs font-semibold mb-2" style={{ color: 'rgba(255,255,255,0.85)' }}>O que fazer a seguir:</p>
+                <ol className="space-y-2">
+                  {[
+                    'Abre o e-mail de recuperação que enviámos.',
+                    'Clica no botão "Redefinir senha".',
+                    'Escolhe uma nova senha segura.',
+                  ].map((s, i) => (
+                    <li key={i} className="flex items-start gap-2.5 text-xs" style={{ color: 'rgba(255,255,255,0.65)' }}>
+                      <span className="w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0 font-black text-[10px]"
+                        style={{ background: '#1B5E3B', color: 'white' }}>{i + 1}</span>
+                      {s}
+                    </li>
+                  ))}
+                </ol>
+                <p className="text-[11px] mt-3" style={{ color: 'rgba(255,255,255,0.4)' }}>
+                  Verifica também a pasta de spam. O link expira em 1 hora.
+                </p>
+              </div>
+
+              <div className="flex items-center justify-center gap-1.5 w-full pt-2"
+                style={{ borderTop: '1px solid rgba(255,255,255,0.15)' }}>
+                <span className="text-xs" style={{ color: 'rgba(255,255,255,0.6)' }}>Não recebeste o e-mail?</span>
+                <motion.button whileTap={{ scale: 0.97 }}
+                  onClick={() => { setStep('email'); setError(''); }}
+                  className="text-xs font-black transition-opacity hover:opacity-75"
+                  style={{ color: '#7DDCE8' }}>
+                  Tentar novamente
+                </motion.button>
+              </div>
+
+              <motion.button whileTap={{ scale: 0.97 }} onClick={onBack}
+                className="w-full py-3 rounded-xl text-sm font-black transition-all"
+                style={{ color: 'rgba(255,255,255,0.7)', background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.15)' }}>
+                Voltar ao login
+              </motion.button>
+            </motion.div>
+          )}
+
+          {/* ── Passo 2: Nova senha (token na URL) ───────────────────────── */}
+          {step === 'reset' && (
+            <motion.div key="reset"
+              initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 6 }}
+              transition={{ duration: 0.2, ease: 'easeOut' }}
+            >
+              <div className="mb-5">
+                <div className="flex items-center gap-2 mb-1">
+                  <div className="w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0"
+                    style={{ background: 'linear-gradient(135deg, #0F4C2A, #1B7A45)' }}>
+                    <Lock size={13} color="white" strokeWidth={2.2} />
                   </div>
+                  <h2 className="font-black" style={{ fontSize: '1.35rem', color: 'white', letterSpacing: '-0.025em', textShadow: '0 1px 8px rgba(0,0,0,0.3)' }}>
+                    Nova senha
+                  </h2>
+                </div>
+                <p className="text-sm mt-1" style={{ color: 'rgba(255,255,255,0.65)', lineHeight: 1.5 }}>
+                  Escolhe uma senha segura com no mínimo 8 caracteres.
+                </p>
+              </div>
 
-                  <form onSubmit={handleEmailSubmit} className="space-y-3">
-                    {/* Email */}
-                    <div>
-                      <label className="block text-xs font-bold mb-1.5 text-left" style={{ color: '#374151' }}>
-                        E-mail
-                      </label>
-                      <div className="flex items-center gap-3 px-4 py-3 rounded-xl border transition-all duration-200 focus-within:border-[#1B5E3B] focus-within:shadow-[0_0_0_3px_rgba(27,94,59,0.1)]"
-                        style={{ background: '#F8FAFC', borderColor: '#E2E8F0' }}>
-                        <Mail size={15} color="#94A3B8" strokeWidth={1.8} className="flex-shrink-0" />
-                        <input
-                          type="email"
-                          placeholder="exemplo@email.com"
-                          value={email}
-                          onChange={(e) => setEmail(e.target.value)}
-                          className="flex-1 text-sm bg-transparent focus:outline-none"
-                          style={{ color: '#0F172A' }}
-                          required
-                        />
-                      </div>
-                    </div>
-
-                    {/* Error */}
-                    <AnimatePresence>
-                      {error && (
-                        <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }}
-                          exit={{ opacity: 0, height: 0 }}
-                          className="flex items-center gap-2 px-3 py-2.5 rounded-xl overflow-hidden"
-                          style={{ background: '#FEF2F2' }}>
-                          <AlertCircle size={13} color="#EF4444" strokeWidth={2.2} />
-                          <p className="text-xs font-semibold" style={{ color: '#EF4444' }}>{error}</p>
-                        </motion.div>
-                      )}
-                    </AnimatePresence>
-
-                    {/* Submit button */}
-                    <motion.button 
-                      type="submit"
-                      disabled={isLoading}
-                      whileHover={{ scale: 1.02 }}
-                      whileTap={{ scale: 0.98 }} 
-                      className="w-full py-3.5 rounded-xl text-white font-black text-sm mt-4 transition-all disabled:opacity-60"
-                      style={{ background: 'linear-gradient(135deg, #0F4C2A 0%, #1B7A45 100%)',
-                        boxShadow: '0 4px 18px rgba(15,76,42,0.38)', letterSpacing: '0.01em' }}
-                    >
-                      {isLoading ? (
-                        <div className="flex items-center justify-center gap-2">
-                          <LoadingDots />
-                          <span>Enviando...</span>
-                        </div>
-                      ) : (
-                        <div className="flex items-center justify-center gap-2">
-                          <span>Enviar c�digo</span>
-                          <ArrowRight size={16} />
-                        </div>
-                      )}
-                    </motion.button>
-                  </form>
-
-                  {/* Footer */}
-                  <div className="flex items-center justify-center gap-1.5 pt-4 mt-4" style={{ borderTop: '1px solid #F1F5F9' }}>
-                    <span className="text-xs" style={{ color: '#64748B' }}>Lembrou da senha?</span>
-                    <motion.button whileTap={{ scale: 0.97 }} onClick={onBack}
-                      className="text-xs font-black transition-opacity hover:opacity-75" style={{ color: '#F4821F' }}>
-                      Fazer login ?
-                    </motion.button>
-                  </div>
-                </motion.div>
+              {/* Alerta: token em falta */}
+              {!token && (
+                <div className="flex items-start gap-2 px-3 py-3 rounded-xl mb-4"
+                  style={{ background: 'rgba(239,68,68,0.15)', border: '1px solid rgba(239,68,68,0.3)' }}>
+                  <AlertCircle size={14} color="#EF4444" className="flex-shrink-0 mt-0.5" />
+                  <p className="text-xs font-semibold" style={{ color: '#EF4444' }}>
+                    Token de recuperação não encontrado. Usa o link recebido por e-mail.
+                  </p>
+                </div>
               )}
-              {/* Step 2: Code */}
-              {step === 'code' && (
-                <motion.div key="code"
-                  initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: 6 }} transition={{ duration: 0.2, ease: 'easeOut' }}>
-                  
-                  {/* Header */}
-                  <div className="mb-5">
-                    <div className="flex items-center gap-2 mb-1">
-                      <div className="w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0"
-                        style={{ background: 'linear-gradient(135deg, #0F4C2A, #1B7A45)' }}>
-                        <Mail size={13} color="white" strokeWidth={2.2} />
-                      </div>
-                      <h2 className="font-black" style={{ fontSize: '1.35rem', color: '#0F172A', letterSpacing: '-0.025em' }}>
-                        Confirme seu email
-                      </h2>
-                    </div>
-                    <p className="text-sm" style={{ color: '#64748B', lineHeight: 1.5 }}>
-                      Enviamos um c�digo para <span className="font-bold" style={{ color: '#0F172A' }}>{email}</span>
-                    </p>
-                  </div>
 
-                  <form onSubmit={handleCodeSubmit} className="space-y-3">
-                    {/* C�digo */}
-                    <div>
-                      <label className="block text-xs font-bold mb-1.5 text-left" style={{ color: '#374151' }}>
-                        C�digo de confirma��o
-                      </label>
-                      <input
-                        type="text"
-                        placeholder="000000"
-                        value={code}
-                        onChange={(e) => setCode(e.target.value.toUpperCase())}
-                        maxLength={6}
-                        className="w-full px-4 py-3 rounded-xl border transition-all duration-200 focus:border-[#1B5E3B] focus:shadow-[0_0_0_3px_rgba(27,94,59,0.1)] text-center text-2xl tracking-widest font-semibold"
-                        style={{ background: '#F8FAFC', borderColor: '#E2E8F0', color: '#0F172A' }}
-                        required
-                      />
-                      <p className="text-xs text-center mt-2" style={{ color: '#94A3B8' }}>
-                        Verifique seu email (spam tamb�m)
-                      </p>
-                    </div>
-
-                    {/* Error */}
-                    <AnimatePresence>
-                      {error && (
-                        <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }}
-                          exit={{ opacity: 0, height: 0 }}
-                          className="flex items-center gap-2 px-3 py-2.5 rounded-xl overflow-hidden"
-                          style={{ background: '#FEF2F2' }}>
-                          <AlertCircle size={13} color="#EF4444" strokeWidth={2.2} />
-                          <p className="text-xs font-semibold" style={{ color: '#EF4444' }}>{error}</p>
-                        </motion.div>
-                      )}
-                    </AnimatePresence>
-
-                    {/* Submit button */}
-                    <motion.button 
-                      type="submit"
-                      disabled={isLoading}
-                      whileHover={{ scale: 1.02 }}
-                      whileTap={{ scale: 0.98 }} 
-                      className="w-full py-3.5 rounded-xl text-white font-black text-sm mt-4 transition-all disabled:opacity-60"
-                      style={{ background: 'linear-gradient(135deg, #0F4C2A 0%, #1B7A45 100%)',
-                        boxShadow: '0 4px 18px rgba(15,76,42,0.38)', letterSpacing: '0.01em' }}
-                    >
-                      {isLoading ? (
-                        <div className="flex items-center justify-center gap-2">
-                          <LoadingDots />
-                          <span>Verificando...</span>
+              <form onSubmit={handleResetSubmit} className="space-y-3">
+                {/* Nova senha */}
+                <AuthField
+                  label="Nova senha"
+                  icon={<IconLock />}
+                  type={showPassword ? 'text' : 'password'}
+                  placeholder="Mínimo 8 caracteres"
+                  value={password}
+                  onChange={e => setPassword(e.target.value)}
+                  autoComplete="new-password"
+                  showPassword={showPassword}
+                  onTogglePassword={() => setShowPassword(!showPassword)}
+                  required
+                  extra={
+                    password.length > 0 ? (
+                      <div className="mt-1.5 flex items-center gap-2">
+                        <div className="flex gap-1 flex-1">
+                          {[1, 2, 3, 4].map(i => (
+                            <div key={i} className="h-1 flex-1 rounded-full transition-all"
+                              style={{ background: i <= strength ? strengthColors[strength] : 'rgba(255,255,255,0.15)' }} />
+                          ))}
                         </div>
-                      ) : (
-                        <div className="flex items-center justify-center gap-2">
-                          <span>Confirmar c�digo</span>
-                          <ArrowRight size={16} />
-                        </div>
-                      )}
-                    </motion.button>
-
-                    {/* Reenviar */}
-                    <button type="button" onClick={() => setStep('email')} 
-                      className="w-full text-sm font-semibold transition-opacity hover:opacity-70 mt-3"
-                      style={{ color: '#2BB5C8' }}>
-                      N�o recebeu? Enviar novamente
-                    </button>
-                  </form>
-                </motion.div>
-              )}
-              {/* Step 3: Reset Password */}
-              {step === 'reset' && (
-                <motion.div key="reset"
-                  initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: 6 }} transition={{ duration: 0.2, ease: 'easeOut' }}>
-                  
-                  {/* Header */}
-                  <div className="mb-5">
-                    <div className="flex items-center gap-2 mb-1">
-                      <div className="w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0"
-                        style={{ background: 'linear-gradient(135deg, #0F4C2A, #1B7A45)' }}>
-                        <Lock size={13} color="white" strokeWidth={2.2} />
+                        <span className="text-[10px] font-semibold" style={{ color: strengthColors[strength] }}>
+                          {strengthLabels[strength]}
+                        </span>
                       </div>
-                      <h2 className="font-black" style={{ fontSize: '1.35rem', color: '#0F172A', letterSpacing: '-0.025em' }}>
-                        Nova senha
-                      </h2>
-                    </div>
-                    <p className="text-sm" style={{ color: '#64748B', lineHeight: 1.5 }}>
-                      Escolha uma senha segura com no m�nimo 8 caracteres.
-                    </p>
-                  </div>
+                    ) : undefined
+                  }
+                />
 
-                  <form onSubmit={handleResetSubmit} className="space-y-3">
-                    {/* Nova senha */}
-                    <div>
-                      <label className="block text-xs font-bold mb-1.5 text-left" style={{ color: '#374151' }}>
-                        Nova senha
-                      </label>
-                      <div className="flex items-center gap-3 px-4 py-3 rounded-xl border transition-all duration-200 focus-within:border-[#1B5E3B] focus-within:shadow-[0_0_0_3px_rgba(27,94,59,0.1)]"
-                        style={{ background: '#F8FAFC', borderColor: '#E2E8F0' }}>
-                        <Lock size={15} color="#94A3B8" strokeWidth={1.8} className="flex-shrink-0" />
-                        <input
-                          type={showPassword ? 'text' : 'password'}
-                          placeholder="M�nimo 8 caracteres"
-                          value={newPassword}
-                          onChange={(e) => setNewPassword(e.target.value)}
-                          className="flex-1 text-sm bg-transparent focus:outline-none"
-                          style={{ color: '#0F172A' }}
-                          required
-                        />
-                        <button type="button" onClick={() => setShowPassword(!showPassword)}
-                          className="flex-shrink-0 transition-colors hover:text-slate-600" style={{ color: '#94A3B8' }}>
-                          {showPassword ? <EyeOff size={15} /> : <Eye size={15} />}
-                        </button>
-                      </div>
-                    </div>
+                {/* Confirmar senha */}
+                <AuthField
+                  label="Confirmar senha"
+                  icon={<IconLock />}
+                  type={showConfirm ? 'text' : 'password'}
+                  placeholder="Repete a senha"
+                  value={confirmPassword}
+                  onChange={e => setConfirmPassword(e.target.value)}
+                  autoComplete="new-password"
+                  showPassword={showConfirm}
+                  onTogglePassword={() => setShowConfirm(!showConfirm)}
+                  required
+                  invalid={!!(confirmPassword && password !== confirmPassword)}
+                  error={confirmPassword && password !== confirmPassword ? 'As senhas não coincidem.' : undefined}
+                />
 
-                    {/* Confirmar senha */}
-                    <div>
-                      <label className="block text-xs font-bold mb-1.5 text-left" style={{ color: '#374151' }}>
-                        Confirmar senha
-                      </label>
-                      <div className="flex items-center gap-3 px-4 py-3 rounded-xl border transition-all duration-200 focus-within:border-[#1B5E3B] focus-within:shadow-[0_0_0_3px_rgba(27,94,59,0.1)]"
-                        style={{ background: '#F8FAFC', borderColor: '#E2E8F0' }}>
-                        <Lock size={15} color="#94A3B8" strokeWidth={1.8} className="flex-shrink-0" />
-                        <input
-                          type={showConfirm ? 'text' : 'password'}
-                          placeholder="Repete a senha"
-                          value={confirmPassword}
-                          onChange={(e) => setConfirmPassword(e.target.value)}
-                          className="flex-1 text-sm bg-transparent focus:outline-none"
-                          style={{ color: '#0F172A' }}
-                          required
-                        />
-                        <button type="button" onClick={() => setShowConfirm(!showConfirm)}
-                          className="flex-shrink-0 transition-colors hover:text-slate-600" style={{ color: '#94A3B8' }}>
-                          {showConfirm ? <EyeOff size={15} /> : <Eye size={15} />}
-                        </button>
-                      </div>
-                    </div>
+                <AnimatePresence>
+                  {error && (
+                    <motion.div key="err"
+                      initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }}
+                      className="overflow-hidden">
+                      <AuthErrorMessage message={error} />
+                    </motion.div>
+                  )}
+                </AnimatePresence>
 
-                    {/* Error */}
-                    <AnimatePresence>
-                      {error && (
-                        <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }}
-                          exit={{ opacity: 0, height: 0 }}
-                          className="flex items-center gap-2 px-3 py-2.5 rounded-xl overflow-hidden"
-                          style={{ background: '#FEF2F2' }}>
-                          <AlertCircle size={13} color="#EF4444" strokeWidth={2.2} />
-                          <p className="text-xs font-semibold" style={{ color: '#EF4444' }}>{error}</p>
-                        </motion.div>
-                      )}
-                    </AnimatePresence>
+                <motion.button type="submit" disabled={isLoading || !token} whileTap={{ scale: 0.98 }}
+                  className="w-full py-3.5 rounded-xl text-white font-black text-sm mt-2 transition-all disabled:opacity-60 flex items-center justify-center gap-2"
+                  style={{ background: 'linear-gradient(135deg, #0F4C2A 0%, #1B7A45 100%)', boxShadow: '0 4px 18px rgba(15,76,42,0.38)', letterSpacing: '0.01em' }}>
+                  {isLoading ? <Loader2 size={16} className="animate-spin" /> : <CheckCircle size={16} />}
+                  {isLoading ? 'A redefinir…' : 'Redefinir senha'}
+                </motion.button>
+              </form>
 
-                    {/* Submit button */}
-                    <motion.button 
-                      type="submit"
-                      disabled={isLoading}
-                      whileHover={{ scale: 1.02 }}
-                      whileTap={{ scale: 0.98 }} 
-                      className="w-full py-3.5 rounded-xl text-white font-black text-sm mt-4 transition-all disabled:opacity-60"
-                      style={{ background: 'linear-gradient(135deg, #0F4C2A 0%, #1B7A45 100%)',
-                        boxShadow: '0 4px 18px rgba(15,76,42,0.38)', letterSpacing: '0.01em' }}
-                    >
-                      {isLoading ? (
-                        <div className="flex items-center justify-center gap-2">
-                          <LoadingDots />
-                          <span>Redefinindo...</span>
-                        </div>
-                      ) : (
-                        <div className="flex items-center justify-center gap-2">
-                          <CheckCircle size={16} />
-                          <span>Redefinir senha</span>
-                        </div>
-                      )}
-                    </motion.button>
-                  </form>
-                </motion.div>
-              )}
-            </AnimatePresence>
+              <div className="flex items-center justify-center gap-1.5 pt-4 mt-4"
+                style={{ borderTop: '1px solid rgba(255,255,255,0.15)' }}>
+                <span className="text-xs" style={{ color: 'rgba(255,255,255,0.6)' }}>Link expirado?</span>
+                <motion.button whileTap={{ scale: 0.97 }}
+                  onClick={() => { setStep('email'); setToken(''); setError(''); setPassword(''); setConfirmPassword(''); }}
+                  className="text-xs font-black transition-opacity hover:opacity-75"
+                  style={{ color: '#7DDCE8' }}>
+                  Solicitar novo link
+                </motion.button>
+              </div>
+            </motion.div>
+          )}
 
-            {/* Copyright */}
-            <p className="text-center text-[10px] mt-4 font-medium" style={{ color: '#CBD5E1' }}>
-              � 2026 Txopela Tour � Todos os direitos reservados
-            </p>
-          </div>
-        </motion.div>
+        </AnimatePresence>
+
+
       </div>
-    </div>
+    </AuthPageLayout>
   );
 }

@@ -1,4 +1,4 @@
-﻿/**
+/**
  * Favorites.tsx
  *
  * Endpoints usados (openapi-schema (3).yaml):
@@ -13,7 +13,7 @@
  */
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Heart, Star, Search, X } from 'lucide-react';
+import { Heart, Star, Search, X, ThumbsUp } from 'lucide-react';
 import { useFavorites, type FavoriteItem, type FavoriteType } from '@/context/FavoritesContext';
 import { PLACEHOLDER_IMAGE } from '@/utils/dataValidation';
 import DestinationDetail from '@/pages/DestinationDetail';
@@ -23,6 +23,8 @@ import { CategoryIcon } from '@/components/icons';
 import type { Local } from '@/types';
 import { useScrollTop } from '@/hooks/useScrollTop';
 import { itemMatchesFilter } from '@/utils/translations';
+import { useSuggest } from '@/hooks/useSuggest';
+import { useAuth } from '@/context/AuthContext';
 
 // ─── Tipos ────────────────────────────────────────────────────────────────────
 
@@ -30,16 +32,18 @@ interface FavoritesProps {
   onLocalPress: (local: Local) => void;
   onNotifications?: () => void;
   onChat?: () => void;
+  /** Abre o perfil público de um autor/proprietário a partir dos detalhes */
+  onAuthorPress?: (author: { id: string; name: string; avatar?: string; type: string }) => void;
 }
 
 type FilterType = 'todos' | FavoriteType;
 
-// Filtros — SEM "Publicações" (openapi só tem local/service/post como save, heritage=local)
 const FILTERS: { id: FilterType; label: string; color: string; tagId: string }[] = [
-  { id: 'todos',   label: 'Todos',    color: '#1B5E3B', tagId: 'todos'     },
-  { id: 'local',   label: 'Locais',   color: '#2BB5C8', tagId: 'natureza'  },
-  { id: 'service', label: 'Serviços', color: '#F4821F', tagId: 'aventura'  },
-  { id: 'heritage',label: 'Cultura',  color: '#7B5EA7', tagId: 'cultura'   },
+  { id: 'todos',   label: 'Todos',       color: '#1B5E3B', tagId: 'todos'       },
+  { id: 'heritage',label: 'Cultura',     color: '#7B5EA7', tagId: 'cultura'     },
+  { id: 'local',   label: 'Locais',      color: '#2BB5C8', tagId: 'natureza'    },
+  { id: 'post',    label: 'Publicações', color: '#E05A3A', tagId: 'publicacoes' },
+  { id: 'service', label: 'Serviços',    color: '#F4821F', tagId: 'aventura'    },
 ];
 
 // Mesma paleta que AllDiscoveries / ServicesListing
@@ -55,7 +59,58 @@ const SERVICE_BADGE_COLORS: Record<string, string> = {
 
 // ─── Componente principal ─────────────────────────────────────────────────────
 
-export default function Favorites({ onLocalPress }: FavoritesProps) {
+/**
+ * Extrai o ID do owner/author/provider do campo raw de um FavoriteItem.
+ * Segue a hierarquia dos schemas do OpenAPI:
+ *   local/heritage → raw.owner.id   (LocalOwner)
+ *   service        → raw.provider.id (Provider) ou raw.contributor.id
+ *   post           → raw.author.id   (PostAuthor)
+ */
+function getOwnerIdFromFavorite(item: FavoriteItem): string | null {
+  const raw = item.raw;
+  if (!raw) return null;
+  if (item.type === 'local' || item.type === 'heritage') {
+    return raw.owner?.id || raw.author?.id || raw.created_by?.id || null;
+  }
+  if (item.type === 'service') {
+    return raw.provider?.id || raw.contributor?.id || raw.owner?.id || null;
+  }
+  if (item.type === 'post') {
+    return raw.author?.id || null;
+  }
+  return null;
+}
+
+// ── SuggestButton — POST/DELETE /api/users/{id}/follow/ (OpenAPI) ─────────────
+// Tamanho "xs" para caber no layout dos cards de Favorites.
+// useAuth() chamado internamente — evita prop drilling por sub-componentes standalone.
+function SuggestButton({ item }: { item: FavoriteItem }) {
+  const { user } = useAuth();
+  const ownerId = getOwnerIdFromFavorite(item);
+  const { isSuggested, isLoading, isSelf, toggle, errorMessage } = useSuggest(ownerId, false, user?.id);
+  if (isSelf) return null;
+  return (
+    <button
+      className="flex items-center gap-0.5"
+      style={{ color: isSuggested ? '#1B5E3B' : '#9CA3AF' }}
+      onClick={e => { e.stopPropagation(); toggle(); }}
+      disabled={isLoading}
+      title={errorMessage ?? undefined}
+      aria-label={isSuggested ? 'Sugerido' : 'Sugerir perfil do autor'}
+    >
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none"
+        stroke={isSuggested ? '#1B5E3B' : 'currentColor'} strokeWidth="2"
+        style={{ opacity: isLoading ? 0.5 : 1 }}>
+        <path d="M22 2L11 13" /><path d="M22 2L15 22 11 13 2 9l20-7z" />
+      </svg>
+      <span className="text-[9px] font-semibold">
+        {isLoading ? 'Sugerindo…' : isSuggested ? 'Sugerido!' : 'Sugerir'}
+      </span>
+    </button>
+  );
+}
+
+export default function Favorites({ onLocalPress, onAuthorPress }: FavoritesProps) {
   useScrollTop();
   const { favorites, toggleFavorite } = useFavorites();
 
@@ -126,6 +181,11 @@ export default function Favorites({ onLocalPress }: FavoritesProps) {
         }}
         onBack={() => { setSelectedDetail(null); setDetailType(null); }}
         onExploreMore={() => { setSelectedDetail(null); setDetailType(null); }}
+        onAuthorPress={onAuthorPress ? (a) => {
+          setSelectedDetail(null);
+          setDetailType(null);
+          onAuthorPress(a);
+        } : undefined}
       />
     );
   }
@@ -138,6 +198,11 @@ export default function Favorites({ onLocalPress }: FavoritesProps) {
         onLike={() => {}}
         onSave={() => {}}
         onShare={() => {}}
+        onAuthorPress={onAuthorPress ? (a) => {
+          setSelectedDetail(null);
+          setDetailType(null);
+          onAuthorPress({ id: a.id, name: a.name, avatar: a.avatar, type: a.type || 'tourist' });
+        } : undefined}
       />
     );
   }
@@ -169,6 +234,11 @@ export default function Favorites({ onLocalPress }: FavoritesProps) {
           contributor: selectedDetail.contributor,
         }}
         onBack={() => { setSelectedDetail(null); setDetailType(null); }}
+        onAuthorPress={onAuthorPress ? (a) => {
+          setSelectedDetail(null);
+          setDetailType(null);
+          onAuthorPress(a);
+        } : undefined}
       />
     );
   }
@@ -280,6 +350,7 @@ export default function Favorites({ onLocalPress }: FavoritesProps) {
                 {filter === 'todos'     ? 'Ainda não tens favoritos'
                  : filter === 'local'   ? 'Sem locais nos favoritos'
                  : filter === 'service' ? 'Sem serviços nos favoritos'
+                 : filter === 'post'    ? 'Sem publicações nos favoritos'
                  :                        'Sem cultura nos favoritos'}
               </p>
             </motion.div>
@@ -394,26 +465,8 @@ function LocalDiscoveryCard({
               <Heart size={13} fill="#0077B6" color="#0077B6" />
             </motion.button>
 
-            <button
-              className="flex items-center gap-0.5"
-              style={{ color: '#9CA3AF' }}
-              onClick={async e => {
-                e.stopPropagation();
-                const title = item.name;
-                const text  = `${item.name}\nDescobre mais em Txopela Tour!`;
-                const url   = window.location.origin;
-                try {
-                  if (navigator.share) await navigator.share({ title, text, url });
-                  else await navigator.clipboard.writeText(`${title}\n${text}\n${url}`);
-                } catch { /* cancelado */ }
-              }}
-            >
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none"
-                stroke="currentColor" strokeWidth="2">
-                <path d="M22 2L11 13" /><path d="M22 2L15 22 11 13 2 9l20-7z" />
-              </svg>
-              <span className="text-[9px] font-semibold">Sugerir</span>
-            </button>
+            {/* Sugerir = seguir o perfil do owner — POST /api/users/{id}/follow/ */}
+            <SuggestButton item={item} />
           </div>
 
           {/* Centro: localização */}
@@ -502,26 +555,8 @@ function FullImageCard({
                 className="flex items-center">
                 <Heart size={13} fill="#0077B6" color="#0077B6" />
               </motion.button>
-              <button
-                className="flex items-center gap-0.5"
-                style={{ color: '#9CA3AF' }}
-                onClick={async e => {
-                  e.stopPropagation();
-                  const title = item.name;
-                  const text  = `${item.name}\nDescobre mais em Txopela Tour!`;
-                  const url   = window.location.origin;
-                  try {
-                    if (navigator.share) await navigator.share({ title, text, url });
-                    else await navigator.clipboard.writeText(`${title}\n${text}\n${url}`);
-                  } catch { /* cancelado */ }
-                }}
-              >
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none"
-                  stroke="currentColor" strokeWidth="2">
-                  <path d="M22 2L11 13" /><path d="M22 2L15 22 11 13 2 9l20-7z" />
-                </svg>
-                <span className="text-[9px] font-semibold">Sugerir</span>
-              </button>
+              {/* Sugerir = seguir o perfil do provider — POST /api/users/{id}/follow/ */}
+              <SuggestButton item={item} />
             </div>
             {locStr && (
               <div className="flex items-center flex-1 justify-center px-1 overflow-hidden">
@@ -538,46 +573,76 @@ function FullImageCard({
     );
   }
 
-  // Posts / heritage: full-image com gradiente e info sobreposta
+  // Posts — layout igual a Local/Serviço: imagem + corpo branco
+  const postColor = '#E05A3A';
+  const locStr = [item.distrito, item.provincia].filter(Boolean).join(' · ');
   return (
-    <div className="relative" style={{ height: 220 }}>
-      <img
-        src={item.image || PLACEHOLDER_IMAGE}
-        alt={item.name}
-        className="absolute inset-0 w-full h-full object-cover"
-        onError={e => { (e.target as HTMLImageElement).src = PLACEHOLDER_IMAGE; }}
-      />
-      <div className="absolute inset-0"
-        style={{ background: 'linear-gradient(to top, rgba(0,0,0,0.82) 0%, rgba(0,0,0,0.18) 55%, transparent 100%)' }} />
+    <>
+      {/* Imagem */}
+      <div className="relative" style={{ height: 200 }}>
+        <img
+          src={item.image || PLACEHOLDER_IMAGE}
+          alt={item.name}
+          className="w-full h-full object-cover"
+          onError={e => { (e.target as HTMLImageElement).src = PLACEHOLDER_IMAGE; }}
+        />
+        <div className="absolute inset-0"
+          style={{ background: 'linear-gradient(to top, rgba(0,0,0,0.4) 0%, transparent 50%)' }} />
 
-      {/* Topo: badge + heart */}
-      <div className="absolute top-3 left-3 right-3 flex items-start justify-between z-10">
-        <FavBadge item={item} />
-        <motion.button
-          whileTap={{ scale: 0.82 }}
-          onClick={onRemove}
-          className="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0"
-          style={{ background: 'rgba(0,119,182,0.90)', backdropFilter: 'blur(4px)' }}>
-          <Heart size={14} fill="white" color="white" />
-        </motion.button>
+        {/* Rating / likes badge — fundo escuro canto inferior esquerdo */}
+        <div className="absolute bottom-3 left-3 flex items-center gap-1 px-2.5 py-1.5 rounded-full"
+          style={{ background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(8px)' }}>
+          <ThumbsUp size={11} fill={item.raw?.likesCount > 0 ? '#60A5FA' : 'none'}
+            color={item.raw?.likesCount > 0 ? '#60A5FA' : '#9CA3AF'} />
+          <span className="text-white text-xs font-bold">
+            {item.raw?.likesCount > 0 ? item.raw.likesCount : '0'}
+          </span>
+        </div>
+
+        {/* Badge categoria — topo esquerdo */}
+        {item.tag && (
+          <span className="absolute top-3 left-3 text-[9px] font-bold px-2 py-0.5 rounded-full text-white"
+            style={{ background: postColor }}>
+            {item.tag}
+          </span>
+        )}
       </div>
 
-      {/* Fundo: nome + rating + pill */}
-      <div className="absolute bottom-0 left-0 right-0 p-3 z-10">
-        <h3 className="text-white font-extrabold text-sm leading-tight mb-2">{item.name}</h3>
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-1">
-            <Star size={11}
-              fill={item.rating && item.rating > 0 ? '#FBBF24' : 'none'}
-              stroke={item.rating && item.rating > 0 ? 'none' : '#9CA3AF'} />
-            <span className="text-white text-xs font-bold">
-              {item.rating && item.rating > 0 ? item.rating.toFixed(1) : 'Novo'}
-            </span>
+      {/* Corpo branco */}
+      <div className="p-2.5 text-left">
+        <div className="flex items-start justify-between mb-1">
+          <h3 className="text-sm font-black leading-tight flex-1" style={{ color: '#1A1A1A' }}>
+            {item.name}
+          </h3>
+        </div>
+
+        {/* Linha de acções — igual a Local/Serviço */}
+        <div className="flex items-center justify-between pt-2 border-t" style={{ borderColor: '#F3F4F6' }}>
+
+          {/* Esquerda: coração azul (remover favorito) + sugerir */}
+          <div className="flex items-center gap-2">
+            <motion.button whileTap={{ scale: 0.85 }} onClick={onRemove}
+              className="flex items-center">
+              <Heart size={13} fill="#0077B6" color="#0077B6" />
+            </motion.button>
+            <SuggestButton item={item} />
           </div>
-          <FavCategoryPill item={item} />
+
+          {/* Centro: localização */}
+          {locStr && (
+            <div className="flex items-center flex-1 justify-center px-1 overflow-hidden">
+              <span className="text-[10px] truncate" style={{ color: '#9CA3AF' }}>{locStr}</span>
+            </div>
+          )}
+
+          {/* Direita: Ver detalhes */}
+          <button className="px-2.5 py-1 rounded-lg text-[9px] font-bold text-white flex-shrink-0"
+            style={{ background: '#1B5E3B' }}>
+            Ver detalhes
+          </button>
         </div>
       </div>
-    </div>
+    </>
   );
 }
 

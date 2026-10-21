@@ -7,6 +7,8 @@ import { servicesApi } from '@/services/api';
 import { useFavorites } from '@/context/FavoritesContext';
 import { useScrollTop } from '@/hooks/useScrollTop';
 import { useTheme } from '@/context/ThemeContext';
+import { useSuggest } from '@/hooks/useSuggest';
+import { useAuth } from '@/context/AuthContext';
 
 interface Service {
   id: string;
@@ -16,6 +18,7 @@ interface Service {
   reviewsCount: number;
   distance: string;
   image: string;
+  images?: string[];
   amenities: string[];
   description: string;
   // Localização — hierarquia completa
@@ -158,10 +161,37 @@ const normalizeCategory = (cat: string): string => {
   return map[cat?.toLowerCase()] || cat;
 };
 
+// ── SuggestButton — POST/DELETE /api/users/{id}/follow/ (OpenAPI) ────────────
+// Cada card tem instância própria do hook para estado isolado.
+function SuggestButton({ providerId, currentUserId }: { providerId: string | undefined | null; currentUserId?: string | null }) {
+  const { isSuggested, isLoading, isSelf, toggle, errorMessage } = useSuggest(providerId, false, currentUserId);
+  if (isSelf) return null;
+  return (
+    <button
+      className="flex items-center gap-0.5 text-sm transition-colors"
+      style={{ color: isSuggested ? '#1B5E3B' : '#9CA3AF' }}
+      onClick={e => { e.stopPropagation(); toggle(); }}
+      disabled={isLoading}
+      title={errorMessage ?? undefined}
+      aria-label={isSuggested ? 'Sugerido' : 'Sugerir perfil do autor'}
+    >
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none"
+        stroke={isSuggested ? '#1B5E3B' : 'currentColor'} strokeWidth="2"
+        style={{ opacity: isLoading ? 0.5 : 1 }}>
+        <path d="M22 2L11 13"/><path d="M22 2L15 22 11 13 2 9l20-7z"/>
+      </svg>
+      <span className="text-[9px] font-semibold">
+        {isLoading ? 'Sugerindo…' : isSuggested ? 'Sugerido!' : 'Sugerir'}
+      </span>
+    </button>
+  );
+}
+
 export default function ServicesListing({ onBack, onSelectService }: ServicesListingProps) {
   useScrollTop();
   const { isDark } = useTheme();
   const { isFavorite, toggleFavorite } = useFavorites();
+  const { user } = useAuth();
   const dm = {
     bg:      isDark ? '#0F1117' : '#F5F5F0',
     surface: isDark ? '#1A1D27' : '#ffffff',
@@ -176,14 +206,14 @@ export default function ServicesListing({ onBack, onSelectService }: ServicesLis
   const [selectedService, setSelectedService] = useState<Service | null>(null);
   const [selectedCategory, setSelectedCategory] = useState('Todas as categorias');
   const [showFilters, setShowFilters] = useState(false);
-  const [suggested, setSuggested] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
     const load = async () => {
       setIsLoading(true);
       try {
         const { data } = await servicesApi.list({ limit: 100, sortBy: 'recent' });
-        const items: any[] = Array.isArray(data) ? data : (data?.services ?? data?.results ?? []);
+        // OpenAPI: GET /api/services/ → data pode ser array direto OU { posts: [...] } (mesmo envelope dos posts)
+        const items: any[] = Array.isArray(data) ? data : (data?.posts ?? data?.services ?? data?.results ?? []);
         setAllServices(
           items
             .map((s: any) => mapValidService(s))
@@ -323,9 +353,24 @@ export default function ServicesListing({ onBack, onSelectService }: ServicesLis
               >
                 {/* Image */}
                 <div className="relative" style={{ height: 200 }}>
-                  <img src={service.image} alt={service.name} className="w-full h-full object-cover" />
+                  <img src={service.image} alt={service.name} className="w-full h-full object-cover"
+                    onError={e => { (e.target as HTMLImageElement).src = PLACEHOLDER_IMAGE; }} />
                   <div className="absolute inset-0" style={{ background: 'linear-gradient(to top, rgba(0,0,0,0.4) 0%, transparent 50%)' }} />
-                  
+
+                  {/* Image count indicator - top right (only when multiple images exist) */}
+                  {service.images && service.images.length > 1 && (
+                    <div className="absolute top-2.5 right-2.5 flex items-center gap-1 px-2 py-1 rounded-full"
+                      style={{ background: 'rgba(0,0,0,0.55)', backdropFilter: 'blur(6px)' }}>
+                      <svg width="10" height="10" viewBox="0 0 24 24" fill="none"
+                        stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <rect x="3" y="3" width="18" height="18" rx="2"/>
+                        <circle cx="8.5" cy="8.5" r="1.5"/>
+                        <polyline points="21 15 16 10 5 21"/>
+                      </svg>
+                      <span className="text-white text-[10px] font-bold">{service.images.length}</span>
+                    </div>
+                  )}
+
                   {/* Rating badge - bottom left */}
                   <div className="absolute bottom-3 left-3 flex items-center gap-1 px-2.5 py-1.5 rounded-full"
                     style={{ background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(8px)' }}>
@@ -373,32 +418,8 @@ export default function ServicesListing({ onBack, onSelectService }: ServicesLis
                           color={isFavorite(service.id) ? '#0077B6' : '#9CA3AF'}
                         />
                       </button>
-                      <button className="flex items-center gap-0.5 text-sm transition-colors"
-                        style={{ color: suggested[service.id] ? '#1B5E3B' : '#9CA3AF' }}
-                        onClick={async e => {
-                          e.stopPropagation();
-                          const title = service.name;
-                          const text  = `${service.name} � ${service.category || ''} em ${service.provincia || 'Mo�ambique'}\nDescobre mais em Txopela Tour!`;
-                          const url   = window.location.origin;
-                          try {
-                            if (navigator.share) {
-                              await navigator.share({ title, text, url });
-                            } else {
-                              await navigator.clipboard.writeText(`${title}\n${text}\n${url}`);
-                            }
-                            setSuggested(p => ({ ...p, [service.id]: true }));
-                            setTimeout(() => setSuggested(p => ({ ...p, [service.id]: false })), 2000);
-                          } catch { /* utilizador cancelou */ }
-                        }}
-                      >
-                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none"
-                          stroke={suggested[service.id] ? '#1B5E3B' : 'currentColor'} strokeWidth="2">
-                          <path d="M22 2L11 13"/><path d="M22 2L15 22 11 13 2 9l20-7z"/>
-                        </svg>
-                        <span className="text-[9px] font-semibold">
-                          {suggested[service.id] ? 'Sugerido!' : 'Sugerir'}
-                        </span>
-                      </button>
+                      {/* Sugerir = seguir o perfil do provider — POST /api/users/{id}/follow/ */}
+                      <SuggestButton providerId={service.contributor?.id} currentUserId={user?.id} />
                     </div>
                     {/* Localização — entre Sugerir e Ver detalhes */}
                     {(service.distrito || service.provincia) && (
@@ -424,4 +445,3 @@ export default function ServicesListing({ onBack, onSelectService }: ServicesLis
     </motion.div>
   );
 }
-

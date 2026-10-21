@@ -20,6 +20,18 @@ import {
 } from './translations';
 
 // ---------------------------------------------------------------------------
+// Imagem de substituição (placeholder)
+// ---------------------------------------------------------------------------
+
+/**
+ * URL usada quando uma entidade não tem imagem real.
+ * SVG inline — sem dependência de rede, sempre disponível mesmo offline.
+ * Representa um ícone de paisagem neutro compatível com todos os tipos de conteúdo.
+ */
+export const PLACEHOLDER_IMAGE =
+  "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='400' height='300' viewBox='0 0 400 300'%3E%3Crect width='400' height='300' fill='%23E5E7EB'/%3E%3Ccircle cx='160' cy='110' r='30' fill='%23D1D5DB'/%3E%3Cpolygon points='60,240 160,120 260,240' fill='%23D1D5DB'/%3E%3Cpolygon points='200,240 300,150 400,240' fill='%23C9CDD4'/%3E%3C/svg%3E";
+
+// ---------------------------------------------------------------------------
 // Sistema de Badges Inteligentes
 // ---------------------------------------------------------------------------
 
@@ -172,29 +184,6 @@ export function resolveUserType(
 }
 
 // ---------------------------------------------------------------------------
-// Placeholder único para publicações sem imagem
-// ---------------------------------------------------------------------------
-
-/**
- * Gera um placeholder SVG inline que funciona sem rede e sem ficheiros
- * externos — evita qualquer pedido HTTP adicional.
- */
-function buildPlaceholder(label: string): string {
-  const encoded = encodeURIComponent(
-    `<svg xmlns="http://www.w3.org/2000/svg" width="400" height="300" viewBox="0 0 400 300">
-      <rect width="400" height="300" fill="#E8EFF5"/>
-      <rect x="150" y="100" width="100" height="70" rx="8" fill="#C5D5E2"/>
-      <circle cx="175" cy="125" r="12" fill="#A0B8C8"/>
-      <polygon points="155,165 185,135 200,150 220,130 245,165" fill="#A0B8C8"/>
-      <text x="200" y="215" font-family="system-ui,sans-serif" font-size="14" fill="#6B8FA3" text-anchor="middle">${label}</text>
-    </svg>`
-  );
-  return `data:image/svg+xml,${encoded}`;
-}
-
-export const PLACEHOLDER_IMAGE = buildPlaceholder('Sem imagem');
-
-// ---------------------------------------------------------------------------
 // Tipos
 // ---------------------------------------------------------------------------
 
@@ -209,69 +198,47 @@ export interface ValidationResult<T> {
 // ---------------------------------------------------------------------------
 
 /**
- * Extrai URLs de imagens de qualquer formato que a API possa devolver:
- *   - `images: string[]`               <- Posts, Locals, Services (formato normal — OpenAPI)
- *   - `images: {url: string}[]`        <- variante de objeto
- *   - `cover_image / coverImage`       <- campo único
- *   - `image / thumbnail`              <- campos alternativos
+ * Extrai URLs de imagens de um item da API.
  *
- * Se a API devolver `images: []` (vazio), consulta o cache local criado no
- * momento do upload (`imageCache.ts`) para recuperar as URLs reais.
+ * OpenAPI schema (LocalList, ServiceList, PostList, LocalDetail, ServiceDetail, PostDetail):
+ *   images: string[]  — array de URIs absolutas Cloudinary (readOnly, required)
  *
- * Devolve sempre um array (pode ser vazio — nunca null/undefined).
+ * Não existem campos cover_image, image, thumbnail, gallery, photos no schema.
+ * O fallback para cache local cobre o caso em que o backend ainda não processou
+ * as imagens após a criação (assíncrono).
  */
 export function extractImages(item: any): string[] {
   if (!item || typeof item !== 'object') return [];
 
-  const BASE_URL = (import.meta.env.VITE_API_URL as string || 'https://api-txopela-tour-3tdq.onrender.com')
-    .replace(/\/api\/?$/, '');
-
-  const seen = new Set<string>();
+  const seen   = new Set<string>();
   const result: string[] = [];
 
   const add = (raw: unknown): void => {
     if (!raw || typeof raw !== 'string') return;
     const url = raw.trim();
     if (!url) return;
-    // Rejeitar placeholders gerados pelo frontend
+    // Rejeitar apenas imagens estáticas locais da aplicação (paths relativos /images/local-* ou /images/service-*)
+    // IMPORTANTE: usar startsWith('/images/') para não rejeitar URLs absolutas externas (Cloudinary, S3, etc.)
+    // que possam conter 'local-' ou 'service-' no nome do ficheiro ou folder.
     if (
-      url.includes('/images/local-') ||
-      url.includes('/images/service-') ||
-      url.includes('placeholder.com') ||
-      url.includes('via.placeholder') ||
-      url.startsWith('data:image/svg+xml') // placeholder SVG inline
+      url.startsWith('/images/local-')   ||
+      url.startsWith('/images/service-') ||
+      url.startsWith('data:image/svg+xml')
     ) return;
-    // Resolver caminhos relativos para URL absoluta
-    const absolute = url.startsWith('http') ? url : `${BASE_URL}${url.startsWith('/') ? '' : '/'}${url}`;
-    if (!seen.has(absolute)) {
-      seen.add(absolute);
-      result.push(absolute);
+    if (!seen.has(url)) {
+      seen.add(url);
+      result.push(url);
     }
   };
 
-  const extractFromEntry = (entry: unknown): void => {
-    if (typeof entry === 'string') { add(entry); return; }
-    if (entry && typeof entry === 'object') {
-      const e = entry as Record<string, unknown>;
-      const val = (e.url ?? e.image ?? e.src ?? e.thumbnail) as string | undefined;
-      add(val ?? null);
-    }
-  };
+  // OpenAPI: campo principal — images: string[] (URIs absolutas)
+  if (Array.isArray(item.images)) {
+    item.images.forEach((entry: unknown) => {
+      if (typeof entry === 'string') add(entry);
+    });
+  }
 
-  // Prioridade 1: campo `images` (formato principal — OpenAPI LocalDetail/ServiceDetail/PostDetail)
-  if (Array.isArray(item.images)) item.images.forEach(extractFromEntry);
-
-  // Prioridade 2: campos de array alternativos
-  if (Array.isArray(item.gallery)) item.gallery.forEach(extractFromEntry);
-  if (Array.isArray(item.photos))  item.photos.forEach(extractFromEntry);
-
-  // Prioridade 3: campos de imagem única
-  add(item.cover_image);
-  add(item.coverImage);
-  add(item.image);
-  add(item.thumbnail);
-
-  // Prioridade 4: fallback para o cache local (imagens submetidas no upload mas não devolvidas pela API)
+  // Fallback para cache local — cobre processamento assíncrono do backend
   if (result.length === 0 && item.id) {
     const cached = getCachedImages(String(item.id));
     cached.forEach(url => {
@@ -338,7 +305,7 @@ export function mapValidLocal(item: any): any | null {
   }
 
   const images = extractImages(item);
-  const primaryImage = images[0] ?? PLACEHOLDER_IMAGE;
+  const primaryImage = images[0] ?? '';
 
   const { badge, badgeBg } = assignLocalBadge(item);
 
@@ -355,7 +322,7 @@ export function mapValidLocal(item: any): any | null {
     categoryKey: (item.category || '').toLowerCase(),   // chave original EN para filtros
     subcategory: item.subcategory || '',                // subcategoria original (ex: "Praia")
     image: primaryImage,
-    images: images.length > 0 ? images : [PLACEHOLDER_IMAGE],
+    images: images,
     // ── Localização ────────────────────────────────────────────────────────────
     // A API devolve 'municipality' para o Distrito (não 'district').
     // Lemos municipality como fonte primária de distrito; district como fallback.
@@ -423,7 +390,7 @@ export function mapValidService(item: any): any | null {
   }
 
   const images = extractImages(item);
-  const primaryImage = images[0] ?? PLACEHOLDER_IMAGE;
+  const primaryImage = images[0] ?? '';
 
   const provider = item.provider ?? item.owner ?? item.author ?? item.created_by;
   let contributor: any = undefined;
@@ -453,7 +420,7 @@ export function mapValidService(item: any): any | null {
     rating: parseFloat(item.rating?.average ?? 0) || 0,
     reviews: item.rating?.count ?? 0,
     image: primaryImage,
-    images: images.length > 0 ? images : [PLACEHOLDER_IMAGE],
+    images: images,
     // ── Localização ────────────────────────────────────────────────────────────
     // A API devolve 'municipality' para o Distrito e 'serviceArea' para o endereço.
     provincia:           item.location?.province                                    ?? '',
@@ -501,7 +468,7 @@ export function mapValidPost(item: any): any | null {
   }
 
   const images = extractImages(item);
-  const primaryImage = images[0] ?? PLACEHOLDER_IMAGE;
+  const primaryImage = images[0] ?? '';
 
   // Normalizar todos os campos de localização — cobrir todos os formatos da API
   const loc = item.location || {};
@@ -524,9 +491,13 @@ export function mapValidPost(item: any): any | null {
       ),
       typeLabel: translateUserType(item.author?.role || item.author?.type),
     },
-    description: item.title || item.content || '',
+    description: item.content || item.title || '',
     image: primaryImage,
-    images: images.length > 0 ? images : [PLACEHOLDER_IMAGE],
+    images: images,
+    // ── Campos da publicação — preservados do backend ─────────────────
+    title:    item.title    || '',
+    category: item.category || '',
+    tags:     Array.isArray(item.tags) ? item.tags : [],
     rating: parseFloat(item.rating?.average ?? item.rating ?? 0),
     reviews: item.rating?.count ?? item.stats?.likesCount ?? 0,
     // ── Localização completa ──────────────────────────────────────────

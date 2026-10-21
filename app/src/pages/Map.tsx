@@ -409,11 +409,10 @@ export default function Map({ onLocalPress, newPostId, onNewPostIdConsumed, onDe
 
       // ── Locais ─────────────────────────────────────────────────────────
       if (localsRes.status === 'fulfilled' && localsRes.value.data) {
-        const items: any[] = (
-          localsRes.value.data.locals
-          ?? localsRes.value.data.results
-          ?? (Array.isArray(localsRes.value.data) ? localsRes.value.data : [])
-        );
+        // OpenAPI: GET /api/locals/ → data = array direto de LocalList
+        const items: any[] = Array.isArray(localsRes.value.data)
+          ? localsRes.value.data
+          : (localsRes.value.data.locals ?? localsRes.value.data.results ?? []);
         items.forEach(item => {
           const coords = extractCoords(item);
           // Pin no mapa — só com coords
@@ -426,11 +425,10 @@ export default function Map({ onLocalPress, newPostId, onNewPostIdConsumed, onDe
 
       // ── Serviços ───────────────────────────────────────────────────────
       if (servicesRes.status === 'fulfilled' && servicesRes.value.data) {
-        const items: any[] = (
-          servicesRes.value.data.services
-          ?? servicesRes.value.data.results
-          ?? (Array.isArray(servicesRes.value.data) ? servicesRes.value.data : [])
-        );
+        // OpenAPI: GET /api/services/ → data pode ser array direto OU { posts: [...] }
+        const items: any[] = Array.isArray(servicesRes.value.data)
+          ? servicesRes.value.data
+          : (servicesRes.value.data.posts ?? servicesRes.value.data.services ?? servicesRes.value.data.results ?? []);
         items.forEach(item => {
           const coords = extractCoords(item);
           // Pin no mapa — só com coords
@@ -443,11 +441,10 @@ export default function Map({ onLocalPress, newPostId, onNewPostIdConsumed, onDe
 
       // ── Posts ─────────────────────────────────────────────────────────
       if (postsRes.status === 'fulfilled' && postsRes.value.data) {
-        const items: any[] = (
-          postsRes.value.data.posts
-          ?? postsRes.value.data.results
-          ?? (Array.isArray(postsRes.value.data) ? postsRes.value.data : [])
-        );
+        // OpenAPI: GET /api/posts/ → data = array direto de PostList
+        const items: any[] = Array.isArray(postsRes.value.data)
+          ? postsRes.value.data
+          : (postsRes.value.data.posts ?? postsRes.value.data.results ?? []);
         items.forEach(item => {
           const pin = postToPin(item);
           if (pin) pins.push(pin);

@@ -1,5 +1,6 @@
+import { useEffect, useRef } from 'react';
 import { motion } from 'framer-motion';
-import { Check, PartyPopper, HeartHandshake, Search, Globe, ArrowRight } from 'lucide-react';
+import { Check, PartyPopper, Search, Globe } from 'lucide-react';
 
 interface SubmissionSuccessScreenProps {
   /** Título principal, ex: "Local" ou "Serviço" */
@@ -10,11 +11,24 @@ interface SubmissionSuccessScreenProps {
 
 /**
  * Tela de sucesso reutilizável para submissões (Locais, Serviços, etc.)
- * 
+ *
  * Design consistente em toda a aplicação, apenas alterando os textos
  * conforme o contexto (Local, Serviço, etc.)
+ * Auto-redireciona para home após 30 segundos de inactividade.
  */
 export default function SubmissionSuccessScreen({ entityType, onSuccess }: SubmissionSuccessScreenProps) {
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Auto-redirect após 30 s sem interacção
+  useEffect(() => {
+    timerRef.current = setTimeout(() => {
+      onSuccess();
+    }, 30_000);
+    return () => {
+      if (timerRef.current) clearTimeout(timerRef.current);
+    };
+  }, [onSuccess]);
+
   return (
     <div
       className="h-screen w-full flex flex-col relative overflow-hidden"
@@ -83,20 +97,11 @@ export default function SubmissionSuccessScreen({ entityType, onSuccess }: Submi
           <div style={{ height: 4, background: 'linear-gradient(90deg, #0F4C2A, #1B7A45, #2BB5C8, #F4821F)' }} />
 
           <div className="px-6 pt-5 pb-6">
-            {/* Eyebrow pill */}
-            <motion.div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full mb-4"
-              style={{ background: '#EEF7F0', border: '1px solid #BBF7D0' }}
-              initial={{ opacity: 0, scale: 0.85 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: 0.42 }}>
-              <div style={{ width: 6, height: 6, borderRadius: '50%', background: '#1B5E3B' }} />
-              <span style={{ fontSize: 10, fontWeight: 800, color: '#1B5E3B', letterSpacing: 1, textTransform: 'uppercase' }}>
-                Submetida com sucesso
-              </span>
-            </motion.div>
 
             {/* Título principal */}
-            <motion.div initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.52 }}>
-              <h1 style={{ fontSize: '1.6rem', fontWeight: 900, color: '#1A1A1A', letterSpacing: '-0.03em', lineHeight: 1.15, marginBottom: 8 }}>
-                {entityType} sugerido<br />
+            <motion.div initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.36 }}>
+              <h1 style={{ fontSize: '1.15rem', fontWeight: 900, letterSpacing: '-0.02em', lineHeight: 1.2, marginBottom: 8, textAlign: 'center', whiteSpace: 'nowrap' }}>
+                <span style={{ color: '#1A1A1A' }}>{entityType} sugerido </span>
                 <span style={{
                   background: 'linear-gradient(90deg, #0F4C2A, #2BB5C8)',
                   WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text',
@@ -105,39 +110,17 @@ export default function SubmissionSuccessScreen({ entityType, onSuccess }: Submi
             </motion.div>
 
             {/* Descrição */}
-            <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.62 }}
-              style={{ fontSize: 13, color: '#6B7280', lineHeight: 1.65, marginBottom: 20 }}>
+            <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.46 }}
+              style={{ fontSize: 13, color: '#6B7280', lineHeight: 1.65, marginBottom: 20, textAlign: 'center' }}>
               A sua sugestão foi recebida e será analisada pela equipa do Txopela Tour antes de ser publicada.
             </motion.p>
 
             {/* Divider simples */}
             <div style={{ height: 1, background: '#F0F0EC', marginBottom: 20 }} />
 
-            {/* Banner de agradecimento — ícone + textos melhor organizados */}
-            <motion.div className="flex items-center gap-4 p-4 rounded-2xl mb-5"
-              style={{ background: 'linear-gradient(135deg, #EEF7F0, #E0F7FA)', border: '1px solid #BBF7D0' }}
-              initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.7 }}>
-              <div style={{
-                width: 44, height: 44, borderRadius: 14, flexShrink: 0,
-                background: 'linear-gradient(135deg, #0F4C2A, #1B7A45)',
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                boxShadow: '0 4px 12px rgba(15,76,42,0.3)',
-              }}>
-                <HeartHandshake size={20} color="white" strokeWidth={1.8} />
-              </div>
-              <div style={{ flex: 1 }}>
-                <p style={{ fontSize: 14, fontWeight: 800, color: '#1A1A1A', marginBottom: 3, lineHeight: 1.2 }}>
-                  Obrigado pela tua contribuição!
-                </p>
-                <p style={{ fontSize: 12, color: '#4B7A5E', lineHeight: 1.5 }}>
-                  Juntos tornamos Moçambique mais descoberto e partilhado com o mundo.
-                </p>
-              </div>
-            </motion.div>
-
-            {/* Timeline de processo — com ícones lucide */}
+            {/* Timeline de processo */}
             <motion.div className="flex items-start mb-6"
-              initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.8 }}>
+              initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.56 }}>
               {[
                 { Icon: Check,  label: 'Submetida',  done: true  },
                 { Icon: Search, label: 'Em análise', done: false },
@@ -175,13 +158,13 @@ export default function SubmissionSuccessScreen({ entityType, onSuccess }: Submi
             <motion.button
               whileTap={{ scale: 0.97 }}
               onClick={onSuccess}
-              className="w-full relative overflow-hidden rounded-2xl text-white font-black flex items-center justify-center gap-2"
+              className="w-full relative overflow-hidden rounded-2xl text-white font-black flex items-center justify-center"
               style={{
                 height: 52, fontSize: 14, letterSpacing: '0.02em',
                 background: 'linear-gradient(135deg, #0F4C2A 0%, #1B7A45 100%)',
                 boxShadow: '0 6px 24px rgba(15,76,42,0.38)',
               }}
-              initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.9 }}
+              initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.68 }}
             >
               <motion.div style={{
                 position: 'absolute', inset: 0,
@@ -191,7 +174,6 @@ export default function SubmissionSuccessScreen({ entityType, onSuccess }: Submi
                 transition={{ duration: 2.5, repeat: Infinity, ease: 'linear', repeatDelay: 2 }}
               />
               <span className="relative z-10">Voltar ao início</span>
-              <ArrowRight size={16} className="relative z-10" />
             </motion.button>
           </div>
         </motion.div>

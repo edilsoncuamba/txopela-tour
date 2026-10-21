@@ -75,8 +75,11 @@ export default function AdminDashboard({
         adminApi.getUsers({ limit: 50 }),
       ]);
       if (statsR.data?.stats)     setStats(statsR.data.stats);
-      if (locR.data?.locals)      setLocals(locR.data.locals);
-      if (svcR.data?.services)    setServices(svcR.data.services);
+      // locals: API devolve array direto ou { locals: [...] }
+      const locItems: any[] = Array.isArray(locR.data) ? locR.data : (locR.data?.locals ?? locR.data?.results ?? []);
+      if (locItems.length > 0) setLocals(locItems);
+      if (svcR.data?.posts)       setServices(svcR.data.posts);
+      else if (svcR.data?.services)    setServices(svcR.data.services);
       if (usersR.data?.users)     setUsers(usersR.data.users);
     } catch {
       setError('Erro ao carregar dados.');

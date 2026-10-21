@@ -39,8 +39,9 @@ export default function Explore({
       try {
         setIsLoading(true);
         const { data } = await localsApi.list();
-        // Confirmado: API devolve { success, locals: [...], pagination: {...} }
-        const results = data?.locals || data?.results || [];
+        // OpenAPI: GET /api/locals/ → data = array direto de LocalList
+        // Fallback para { locals: [...] } por compatibilidade com respostas antigas
+        const results: any[] = Array.isArray(data) ? data : (data?.locals ?? data?.results ?? []);
         // Mapeia campos da API para o tipo Local do frontend
         const mapped = results.map((p: any) => ({
           id:          p.id,
@@ -221,9 +222,10 @@ export default function Explore({
                   viewMode === 'list' ? 'w-24 h-24 flex-shrink-0' : 'w-full h-40'
                 }`}>
                   <img
-                    src={local.images[0]}
+                    src={local.images?.[0] ?? PLACEHOLDER_IMAGE}
                     alt={local.name}
                     className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-300"
+                    onError={e => { (e.target as HTMLImageElement).src = PLACEHOLDER_IMAGE; }}
                   />
                   <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors" />
                 </div>

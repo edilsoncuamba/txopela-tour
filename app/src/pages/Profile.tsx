@@ -10,9 +10,12 @@ import {
 } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import DestinationDetail from '@/pages/DestinationDetail';
+import PublicProfile from '@/pages/PublicProfile';
 import { localsApi, usersApi } from '@/services/api';
 import type { Local } from '@/types';
 import { useScrollTop } from '@/hooks/useScrollTop';
+import { useSuggest } from '@/hooks/useSuggest';
+import { canCreateBusiness, shouldShowSuggestScreen } from '@/utils/permissions';
 
 interface ProfileProps {
   onSettings: () => void;
@@ -32,11 +35,11 @@ interface Review {
 interface Suggestion {
   id: string; place: string; desc: string; status: string; date: string;
   image: string; category: string; catColor: string; rating: number;
-  reviews: number; provincia: string;
+  reviews: number; provincia: string; ownerId?: string;
 }
 interface Destination {
   id: string; place: string; desc: string; date: string; image: string;
-  category: string; catColor: string; rating: number; reviews: number; provincia: string;
+  category: string; catColor: string; rating: number; reviews: number; provincia: string; ownerId?: string;
 }
 interface SearchItem { id: string; query: string; date: string; }
 
@@ -49,7 +52,10 @@ const CAT_COLOR: Record<string, string> = {
 function DestCard({ item, onLike, liked, onClick }: {
   item: Destination; onLike?: () => void; liked?: boolean; onClick?: () => void;
 }) {
-  const [suggested, setSuggested] = useState(false);
+  // Sugerir = seguir o perfil do owner — POST /api/users/{id}/follow/ (OpenAPI)
+  const { user } = useAuth();
+  const { isSuggested, isLoading: isSuggestLoading, toggle: toggleSuggest, errorMessage: suggestError, isSelf } =
+    useSuggest(item.ownerId || null, false, user?.id);
   const { isDark } = useTheme();
   return (
     <motion.div
@@ -106,28 +112,25 @@ function DestCard({ item, onLike, liked, onClick }: {
             >
               <Heart size={13} fill={liked ? 'currentColor' : 'none'} />
             </button>
+            {!isSelf && (
             <button
               className="flex items-center gap-0.5 transition-colors"
-              style={{ color: suggested ? '#1B5E3B' : '#9CA3AF' }}
-              onClick={async e => {
-                e.stopPropagation();
-                const title = item.place;
-                const text  = `${item.place} — Txopela Tour`;
-                const url   = window.location.origin;
-                try {
-                  if (navigator.share) await navigator.share({ title, text, url });
-                  else await navigator.clipboard.writeText(`${title}\n${text}\n${url}`);
-                  setSuggested(true);
-                  setTimeout(() => setSuggested(false), 2000);
-                } catch { /* cancelado */ }
-              }}
+              style={{ color: isSuggested ? '#1B5E3B' : '#9CA3AF' }}
+              onClick={e => { e.stopPropagation(); toggleSuggest(); }}
+              disabled={isSuggestLoading}
+              title={suggestError ?? undefined}
+              aria-label={isSuggested ? 'Sugerido' : 'Sugerir perfil do autor'}
             >
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none"
-                stroke={suggested ? '#1B5E3B' : 'currentColor'} strokeWidth="2">
+                stroke={isSuggested ? '#1B5E3B' : 'currentColor'} strokeWidth="2"
+                style={{ opacity: isSuggestLoading ? 0.5 : 1 }}>
                 <path d="M22 2L11 13" /><path d="M22 2L15 22 11 13 2 9l20-7z" />
               </svg>
-              <span className="text-[9px] font-semibold">{suggested ? 'Sugerido!' : 'Sugerir'}</span>
+              <span className="text-[9px] font-semibold">
+                {isSuggestLoading ? 'Sugerindo…' : isSuggested ? 'Sugerido!' : 'Sugerir'}
+              </span>
             </button>
+            )}
           </div>
           <button
             className="px-2.5 py-1 rounded-lg text-[9px] font-bold text-white"
@@ -297,7 +300,10 @@ function SuggestionCard({ item, index, liked, onLike, onClick, statusColor, stat
   statusColor: Record<string, string>;
   statusBg: Record<string, string>;
 }) {
-  const [suggested, setSuggested] = useState(false);
+  // Sugerir = seguir o perfil do owner — POST /api/users/{id}/follow/ (OpenAPI)
+  const { user } = useAuth();
+  const { isSuggested, isLoading: isSuggestLoading, toggle: toggleSuggest, errorMessage: suggestError, isSelf } =
+    useSuggest(item.ownerId || null, false, user?.id);
   const { isDark } = useTheme();
   return (
     <motion.div
@@ -357,28 +363,25 @@ function SuggestionCard({ item, index, liked, onLike, onClick, statusColor, stat
             >
               <Heart size={13} fill={liked ? 'currentColor' : 'none'} />
             </button>
+            {!isSelf && (
             <button
               className="flex items-center gap-0.5 transition-colors"
-              style={{ color: suggested ? '#1B5E3B' : '#9CA3AF' }}
-              onClick={async e => {
-                e.stopPropagation();
-                const title = item.place;
-                const text  = `${item.place} — Txopela Tour`;
-                const url   = window.location.origin;
-                try {
-                  if (navigator.share) await navigator.share({ title, text, url });
-                  else await navigator.clipboard.writeText(`${title}\n${text}\n${url}`);
-                  setSuggested(true);
-                  setTimeout(() => setSuggested(false), 2000);
-                } catch { /* cancelado */ }
-              }}
+              style={{ color: isSuggested ? '#1B5E3B' : '#9CA3AF' }}
+              onClick={e => { e.stopPropagation(); toggleSuggest(); }}
+              disabled={isSuggestLoading}
+              title={suggestError ?? undefined}
+              aria-label={isSuggested ? 'Sugerido' : 'Sugerir perfil do autor'}
             >
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none"
-                stroke={suggested ? '#1B5E3B' : 'currentColor'} strokeWidth="2">
+                stroke={isSuggested ? '#1B5E3B' : 'currentColor'} strokeWidth="2"
+                style={{ opacity: isSuggestLoading ? 0.5 : 1 }}>
                 <path d="M22 2L11 13" /><path d="M22 2L15 22 11 13 2 9l20-7z" />
               </svg>
-              <span className="text-[9px] font-semibold">{suggested ? 'Sugerido!' : 'Sugerir'}</span>
+              <span className="text-[9px] font-semibold">
+                {isSuggestLoading ? 'Sugerindo…' : isSuggested ? 'Sugerido!' : 'Sugerir'}
+              </span>
             </button>
+            )}
           </div>
           <button
             className="px-2.5 py-1 rounded-lg text-[9px] font-bold text-white"
@@ -409,34 +412,31 @@ function SuggestionsScreen({ onBack }: { onBack: () => void }) {
   const [liked, setLiked] = useState<Record<string, boolean>>({});
   const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [filter, setFilter] = useState<'Todos' | 'Aprovado' | 'Em revis�o' | 'Cancelado'>('Todos');
+  const [filter, setFilter] = useState<'Todos' | 'Aprovado' | 'Em revisão' | 'Cancelado'>('Todos');
   const [selected, setSelected] = useState<Suggestion | null>(null);
 
   useEffect(() => {
     const load = async () => {
       try {
-        // GET /api/locals/ � filtra pelo owner.id do utilizador autenticado (via AuthContext)
-        const { data } = await localsApi.list({ limit: 100 });
-        const allLocals: any[] = data?.locals || [];
-        const myLocals = user?.id
-          ? allLocals.filter((l: any) =>
-              l.owner?.id === user.id ||
-              l.author?.id === user.id ||
-              l.created_by?.id === user.id
-            )
-          : allLocals;
-        setSuggestions(myLocals.map((s: any) => ({
+        // GET /api/users/me/locals/ — devolve os locais do utilizador autenticado
+        // com todos os estados (pending, approved, rejected)
+        const { data } = await usersApi.myLocals();
+        const allLocals: any[] = Array.isArray(data) ? data : (data?.locals ?? data?.results ?? []);
+        setSuggestions(allLocals.map((s: any) => ({
           id: String(s.id),
           place: s.name || 'Local',
           desc: s.description || '',
-          status: s.status === 'approved' ? 'Aprovado' : s.status === 'rejected' ? 'Cancelado' : 'Em revis�o',
-          date: s.createdAt ? new Date(s.createdAt).toLocaleDateString('pt-PT') : '',
+          status: s.status === 'approved' ? 'Aprovado' : s.status === 'rejected' ? 'Cancelado' : 'Em revisão',
+          date: s.createdAt || s.created_at
+            ? new Date(s.createdAt ?? s.created_at).toLocaleDateString('pt-PT')
+            : '',
           image: extractImages(s)[0] ?? PLACEHOLDER_IMAGE,
-          category: s.category || 'Local',
-          catColor: CAT_COLOR[s.category] || CAT_COLOR.default,
-          rating: s.rating?.average ?? 0,
-          reviews: s.rating?.count ?? 0,
-          provincia: s.location?.province || '',
+          category: s.category?.name || s.category || 'Local',
+          catColor: CAT_COLOR[s.category?.name ?? s.category] || CAT_COLOR.default,
+          rating: typeof s.rating === 'number' ? s.rating : (s.rating?.average ?? 0),
+          reviews: s.reviews_count ?? s.rating?.count ?? 0,
+          provincia: s.location?.province || s.address || '',
+          ownerId: s.author?.id || s.owner?.id || '',
         })));
       } catch {
         setSuggestions([]);
@@ -445,9 +445,9 @@ function SuggestionsScreen({ onBack }: { onBack: () => void }) {
     load();
   }, []);
 
-  const statusColor: Record<string, string> = { 'Aprovado': '#1B5E3B', 'Em revis�o': '#F4821F', 'Cancelado': '#EF4444' };
-  const statusBg: Record<string, string>    = { 'Aprovado': '#EEF7F0', 'Em revis�o': '#FFF3E0', 'Cancelado': '#FEF2F2' };
-  const filters = ['Todos', 'Aprovado', 'Em revis�o', 'Cancelado'] as const;
+  const statusColor: Record<string, string> = { 'Aprovado': '#1B5E3B', 'Em revisão': '#F4821F', 'Cancelado': '#EF4444' };
+  const statusBg: Record<string, string>    = { 'Aprovado': '#EEF7F0', 'Em revisão': '#FFF3E0', 'Cancelado': '#FEF2F2' };
+  const filters = ['Todos', 'Aprovado', 'Em revisão', 'Cancelado'] as const;
   const filtered = filter === 'Todos' ? suggestions : suggestions.filter(s => s.status === filter);
 
   if (selected) {
@@ -533,7 +533,7 @@ function DestinationsScreen({ onBack }: { onBack: () => void }) {
     const load = async () => {
       try {
         const { data } = await localsApi.list({ sortBy: 'recent', limit: 20 });
-        const items: any[] = data?.locals || [];
+        const items: any[] = Array.isArray(data) ? data : (data?.locals ?? data?.results ?? []);
         setDestinations(items.map((d: any) => ({
           id: String(d.id), place: d.name || 'Local', desc: d.description || '',
           date: d.createdAt ? new Date(d.createdAt).toLocaleDateString('pt-PT') : '',
@@ -541,6 +541,7 @@ function DestinationsScreen({ onBack }: { onBack: () => void }) {
           category: d.category || 'Local', catColor: CAT_COLOR[d.category] || CAT_COLOR.default,
           rating: d.rating?.average ?? 0, reviews: d.rating?.count ?? 0,
           provincia: d.location?.province || '',
+          ownerId: d.owner?.id || d.author?.id || d.created_by?.id || '',
         })));
       } catch { setDestinations([]); }
       finally { setIsLoading(false); }
@@ -617,10 +618,17 @@ function SearchesScreen({ onBack }: { onBack: () => void }) {
   );
 }
 
-// -- Suggested Profiles screen
+// Roles conforme UserRoleEnum do openapi-schema-1: tourist|local_resident|local_business|curator|admin
 const ROLE_LABEL: Record<string, string> = {
-  tourist: 'Turista', local_resident: 'Residente', local_business: 'Negocio',
-  guide: 'Guia', curator: 'Apurador', admin: 'Admin', business: 'Negocio',
+  tourist:        'Turista',
+  local_resident: 'Morador Local',
+  local_business: 'Negócio Local',
+  curator:        'Apurador',
+  admin:          'Admin',
+  // valores mapeados pelo frontend (AuthContext.mapRole)
+  traveler:       'Turista',
+  resident:       'Morador Local',
+  business:       'Negócio Local',
 };
 
 interface UserSuggestion {
@@ -635,6 +643,8 @@ function SuggestedProfilesScreen({ onBack }: { onBack: () => void }) {
   const [loadingFollow, setLoadingFollow] = useState<Record<string, boolean>>({});
   const [search, setSearch] = useState('');
   const [error, setError] = useState<string | null>(null);
+  // Perfil seleccionado para abrir inline (padrão usado em PublicProfile/nestedProfile)
+  const [selectedProfile, setSelectedProfile] = useState<{ id: string; name: string; avatar?: string; type: string } | null>(null);
   const { isDark } = useTheme();
   const dm = {
     bg:      isDark ? '#0F1117' : '#F5F5F0',
@@ -676,6 +686,16 @@ function SuggestedProfilesScreen({ onBack }: { onBack: () => void }) {
   }, [following, users]);
 
   const filtered = users.filter(u => !search || u.name.toLowerCase().includes(search.toLowerCase()));
+
+  // Abrir perfil público inline (evita perder o estado do ecrã de sugestões)
+  if (selectedProfile) {
+    return (
+      <PublicProfile
+        author={selectedProfile}
+        onBack={() => setSelectedProfile(null)}
+      />
+    );
+  }
 
   return (
     <motion.div className="min-h-screen pb-24" style={{ background: dm.bg, fontFamily: 'Nunito, sans-serif' }}
@@ -737,17 +757,29 @@ function SuggestedProfilesScreen({ onBack }: { onBack: () => void }) {
                     transition={{ delay: index * 0.04 }}
                     className="rounded-2xl p-4 flex items-center gap-3 shadow-sm"
                     style={{ background: dm.surface }}>
-                    <div className="w-14 h-14 rounded-full overflow-hidden flex-shrink-0"
-                      style={{ border: `2px solid ${dm.border}` }}>
+                    {/* Avatar — clicável para abrir perfil */}
+                    <button
+                      className="w-14 h-14 rounded-full overflow-hidden flex-shrink-0 focus:outline-none"
+                      style={{ border: `2px solid ${dm.border}`, background: 'transparent', padding: 0 }}
+                      onClick={() => setSelectedProfile({ id: u.id, name: u.name, avatar: u.avatar, type: u.role })}
+                      aria-label={`Ver perfil de ${u.name}`}
+                    >
                       {u.avatar
                         ? <img src={u.avatar} alt={u.name} className="w-full h-full object-cover" />
                         : <div className="w-full h-full flex items-center justify-center text-xl font-black"
                             style={{ background: 'linear-gradient(135deg,#2BB5C8,#1B5E3B)', color: 'white' }}>
                             {u.name.charAt(0).toUpperCase()}
                           </div>}
-                    </div>
+                    </button>
                     <div className="flex-1 min-w-0">
-                      <p className="text-sm font-black truncate" style={{ color: dm.text }}>{u.name}</p>
+                      {/* Nome — clicável para abrir perfil */}
+                      <button
+                        className="text-sm font-black truncate text-left focus:outline-none w-full"
+                        style={{ color: dm.text, background: 'none', border: 'none', padding: 0, cursor: 'pointer' }}
+                        onClick={() => setSelectedProfile({ id: u.id, name: u.name, avatar: u.avatar, type: u.role })}
+                      >
+                        {u.name}
+                      </button>
                       <span className="text-[10px] font-bold px-2 py-0.5 rounded-full"
                         style={{ background: isDark ? 'rgba(74,222,128,0.12)' : '#EEF7F0', color: '#1B5E3B' }}>
                         {ROLE_LABEL[u.role] ?? u.role}
@@ -773,7 +805,7 @@ function SuggestedProfilesScreen({ onBack }: { onBack: () => void }) {
 
 // -- Main Profile component
 export default function Profile({
-  onSettings, onLogout: _onLogout, onAddPost: _onAddPost, onEditProfile, onSuggest }: ProfileProps) {
+  onSettings, onLogout: _onLogout, onAddPost, onEditProfile, onSuggest }: ProfileProps) {
   useScrollTop();
   const { user } = useAuth();
   const { isDark } = useTheme();
@@ -844,19 +876,39 @@ export default function Profile({
         style={{ background: dm.skel }} />
     : <>{v}</>;
 
-  const stats = [
-    { icon: <MapPin size={20} color="#1B5E3B" strokeWidth={1.8} />, value: statsCount.locaisAprovados, label: 'Locais',     bg: '#EEF7F0', screen: 'suggestions' as const },
-    { icon: <Send   size={20} color="#2BB5C8" strokeWidth={1.8} />, value: statsCount.servicos,        label: 'Servicos',   bg: '#EBF8FB', screen: 'suggestions' as const },
-    { icon: <Star   size={20} color="#FBBF24" fill="#FBBF24"  />,   value: statsCount.avaliacoes,      label: 'Avaliacoes', bg: '#FEF9EC', screen: 'reviews'     as const },
-  ];
+  // Determina se é um utilizador do tipo negócio
+  const isBusiness = canCreateBusiness(user?.role, user?.type);
 
-  const activities = [
-    { icon: <MapPin  size={18} color="#1B5E3B" />, bg: '#EEF7F0', title: 'Meus pontos sugeridos',   desc: 'Locais turisticos que sugeriste', screen: 'suggestions'  as const, count: statsCount.locaisAprovados },
-    { icon: <Users   size={18} color="#2BB5C8" />, bg: '#EBF8FB', title: 'Perfis Sugeridos',        desc: 'Pessoas que podes conhecer',     screen: 'people'       as const, count: 0 },
-    { icon: <Compass size={18} color="#2BB5C8" />, bg: '#EBF8FB', title: 'Destinos explorados',     desc: 'Lugares que visitaste',          screen: 'destinations' as const, count: statsCount.locaisAprovados },
-    { icon: <Search  size={18} color="#6B7280" />, bg: '#F3F4F6', title: 'Pesquisas recentes (IA)', desc: 'Ultimas buscas que fizeste',     screen: 'searches'     as const, count: statsCount.searches },
-    { icon: <Star    size={18} color="#FBBF24" />, bg: '#FEF9EC', title: 'Avaliacoes e comentarios',desc: 'O que ja avaliaste',             screen: 'reviews'      as const, count: statsCount.avaliacoes },
-  ];
+  // Stats — negócio: Locais / Serviços / Avaliações
+  //          outros: só Publicações / Avaliações
+  const stats = isBusiness
+    ? [
+        { icon: <MapPin size={20} color="#1B5E3B" strokeWidth={1.8} />, value: statsCount.locaisAprovados, label: 'Locais',     bg: '#EEF7F0', screen: 'suggestions' as const },
+        { icon: <Send   size={20} color="#2BB5C8" strokeWidth={1.8} />, value: statsCount.servicos,        label: 'Serviços',   bg: '#EBF8FB', screen: 'suggestions' as const },
+        { icon: <Star   size={20} color="#FBBF24" fill="#FBBF24"   />, value: statsCount.avaliacoes,      label: 'Avaliações', bg: '#FEF9EC', screen: 'reviews'     as const },
+      ]
+    : [
+        { icon: <Send   size={20} color="#1B5E3B" strokeWidth={1.8} />, value: user?.posts_count ?? 0,  label: 'Publicações', bg: '#EEF7F0', screen: 'suggestions' as const },
+        { icon: <Users  size={20} color="#2BB5C8" strokeWidth={1.8} />, value: user?.following_count ?? 0, label: 'A seguir',  bg: '#EBF8FB', screen: 'people'      as const },
+        { icon: <Star   size={20} color="#FBBF24" fill="#FBBF24"   />, value: statsCount.avaliacoes,   label: 'Avaliações', bg: '#FEF9EC', screen: 'reviews'      as const },
+      ];
+
+  // Atalhos de actividade — negócio: inclui locais e serviços
+  //                          outros: não inclui locais nem serviços
+  const activities = isBusiness
+    ? [
+        { icon: <MapPin  size={18} color="#1B5E3B" />, bg: '#EEF7F0', title: 'Meus pontos sugeridos',   desc: 'Locais turísticos que sugeriste',     screen: 'suggestions'  as const, count: statsCount.locaisAprovados },
+        { icon: <Users   size={18} color="#2BB5C8" />, bg: '#EBF8FB', title: 'Perfis Sugeridos',        desc: 'Pessoas que podes conhecer',           screen: 'people'       as const, count: 0 },
+        { icon: <Compass size={18} color="#2BB5C8" />, bg: '#EBF8FB', title: 'Destinos explorados',     desc: 'Lugares que visitaste',                screen: 'destinations' as const, count: statsCount.locaisAprovados },
+        { icon: <Search  size={18} color="#6B7280" />, bg: '#F3F4F6', title: 'Pesquisas recentes (IA)', desc: 'Últimas buscas que fizeste',            screen: 'searches'     as const, count: statsCount.searches },
+        { icon: <Star    size={18} color="#FBBF24" />, bg: '#FEF9EC', title: 'Avaliações e comentários',desc: 'O que já avaliaste',                   screen: 'reviews'      as const, count: statsCount.avaliacoes },
+      ]
+    : [
+        { icon: <Users   size={18} color="#2BB5C8" />, bg: '#EBF8FB', title: 'Perfis Sugeridos',        desc: 'Pessoas que podes conhecer',           screen: 'people'       as const, count: 0 },
+        { icon: <Compass size={18} color="#2BB5C8" />, bg: '#EBF8FB', title: 'Destinos explorados',     desc: 'Lugares que visitaste',                screen: 'destinations' as const, count: 0 },
+        { icon: <Search  size={18} color="#6B7280" />, bg: '#F3F4F6', title: 'Pesquisas recentes (IA)', desc: 'Últimas buscas que fizeste',            screen: 'searches'     as const, count: statsCount.searches },
+        { icon: <Star    size={18} color="#FBBF24" />, bg: '#FEF9EC', title: 'Avaliações e comentários',desc: 'O que já avaliaste',                   screen: 'reviews'      as const, count: statsCount.avaliacoes },
+      ];
 
   if (activeScreen === 'reviews')      return <ReviewsScreen           onBack={() => setActiveScreen(null)} />;
   if (activeScreen === 'suggestions')  return <SuggestionsScreen       onBack={() => setActiveScreen(null)} />;
@@ -955,11 +1007,19 @@ export default function Profile({
               <p className="text-white/75 text-xs leading-relaxed mb-3">
                 A tua contribui��o ajuda a tornar Mo�ambique mais incr�vel para todos.
               </p>
-              <button onClick={onSuggest}
-                className="inline-flex items-center gap-1.5 px-4 py-1.5 rounded-full text-xs font-bold text-white border border-white/30 transition-all active:scale-95"
-                style={{ background: 'rgba(255,255,255,0.18)' }}>
-                Sugerir local
-              </button>
+              {shouldShowSuggestScreen(user?.role, user?.type) ? (
+                <button onClick={onSuggest}
+                  className="inline-flex items-center gap-1.5 px-4 py-1.5 rounded-full text-xs font-bold text-white border border-white/30 transition-all active:scale-95"
+                  style={{ background: 'rgba(255,255,255,0.18)' }}>
+                  Sugerir
+                </button>
+              ) : (
+                <button onClick={onAddPost}
+                  className="inline-flex items-center gap-1.5 px-4 py-1.5 rounded-full text-xs font-bold text-white border border-white/30 transition-all active:scale-95"
+                  style={{ background: 'rgba(255,255,255,0.18)' }}>
+                  Sugerir publicação
+                </button>
+              )}
             </div>
           </motion.div>
         )}

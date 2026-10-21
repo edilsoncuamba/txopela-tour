@@ -60,8 +60,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     try {
       const { data, error: apiError } = await localsApi.list(params);
       if (data) {
-        // Documentação 3.1: A API devolve { success: true, locals: [...], pagination: {...} }
-        const items = data.locals || [];
+        // OpenAPI: GET /api/locals/ → data = array direto de LocalList
+        // Fallback para { locals: [...] } por compatibilidade com respostas antigas
+        const items = Array.isArray(data) ? data : (data?.locals ?? data?.results ?? []);
         
         // Transform API data to match Local type
         const transformedData = items.map((item: any) => ({
@@ -98,8 +99,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const fetchCategories = useCallback(async () => {
     try {
       const { data } = await localsApi.list({ limit: 100 });
-      if (data?.locals) {
-        const items = data.locals;
+      // OpenAPI: array direto ou { locals: [...] }
+      const items: any[] = Array.isArray(data) ? data : (data?.locals ?? data?.results ?? []);
+      if (items.length > 0) {
         const seen = new Set<string>();
         const cats: any[] = [];
         items.forEach((item: any) => {

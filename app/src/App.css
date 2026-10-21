@@ -1,9 +1,15 @@
 #root {
   width: 100%;
-  height: 100vh;
+  /* dvh evita o problema do address bar retrátil no Chrome/Safari mobile */
+  min-height: 100vh;
+  min-height: 100dvh;
   margin: 0;
   padding: 0;
-  text-align: center;
+  /* Removido text-align:center — causava alinhamentos incorretos em toda a app */
+  text-align: left;
+  /* Previne overflow horizontal global */
+  overflow-x: hidden;
+  position: relative;
 }
 
 .logo {

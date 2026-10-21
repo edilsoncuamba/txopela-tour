@@ -1,7 +1,7 @@
 /**
  * ReviewManager — sistema de avaliações
  *
- * Fonte de verdade: openapi-schema(3).yaml
+ * Fonte de verdade: openapi-schema(4).yaml
  *
  * As reviews são fornecidas pelo pai via prop `initialReviews` —
  * extraídas do LocalDetail/ServiceDetail que já as inclui embutidas:
@@ -12,10 +12,14 @@
  *   POST /api/locals/{id}/reviews/   { rating: 1-5, comment: string }
  *   POST /api/services/{id}/reviews/ { rating: 1-5, comment: string }
  *
+ * Para marcar como útil (toggle):
+ *   POST /api/reviews/{id}/helpful/ → ReviewHelpfulResponse { success, helpfulCount }
+ *
  * LocalReview: { id, rating, comment, author, createdAt, helpful }
+ * NOTA: hasMarkedHelpful não existe no schema — é estado local do frontend.
  */
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Star, AlertCircle, X } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
@@ -44,24 +48,63 @@ export default function ReviewManager({
 }: ReviewManagerProps) {
   const { user } = useAuth();
 
-  // Estado de reviews começa com as embutidas do LocalDetail
-  const [reviews,   setReviews]   = useState<Review[]>(initialReviews);
-  const [error,     setError]     = useState<string | null>(null);
-  const [showForm,  setShowForm]  = useState(false);
-  const [rating,    setRating]    = useState(5);
-  const [comment,   setComment]   = useState('');
+  const [reviews,    setReviews]    = useState<Review[]>(initialReviews);
+  const [error,      setError]      = useState<string | null>(null);
+  const [showForm,   setShowForm]   = useState(false);
+  const [rating,     setRating]     = useState(5);
+  const [comment,    setComment]    = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [reportingReview, setReportingReview] = useState<string | null>(null);
   const [reportReason,    setReportReason]    = useState('');
 
-  // Sincronizar quando o pai actualiza initialReviews.
-  // Acontece depois de loadLocalDetails terminar e chamar setLocalReviews(best).
-  // Só substitui se a lista nova for diferente em tamanho (evita loop infinito).
+  // Guard para evitar set de estado após unmount
+  const mountedRef = useRef(true);
   useEffect(() => {
-    setReviews(initialReviews);
+    mountedRef.current = true;
+    return () => { mountedRef.current = false; };
+  }, []);
+
+  // Sincronizar quando o pai actualiza initialReviews.
+  // Só substitui se a lista nova tiver conteúdo diferente (tamanho ou primeiro id),
+  // para evitar reset do estado local enquanto o utilizador está a interagir.
+  useEffect(() => {
+    if (initialReviews.length === 0) return;
+    setReviews(prev => {
+      if (prev.length === initialReviews.length && prev[0]?.id === initialReviews[0]?.id) {
+        return prev; // sem alteração relevante — preservar estado local
+      }
+      return initialReviews;
+    });
   }, [initialReviews]);
 
-  // ── Criar review ─────────────────────────────────────────────────────────────
+  // ── Recarregar reviews do backend ─────────────────────────────────────────
+  // Chamado após criar uma nova review para garantir persistência confirmada.
+  const reloadFromBackend = async () => {
+    try {
+      const resp =
+        resourceType === 'local'
+          ? await reviewsApi.getForLocal(resourceId)
+          : await reviewsApi.getForService(resourceId);
+
+      if (!mountedRef.current) return;
+      if (resp.error || !resp.data) return;
+
+      const raw = resp.data as any;
+      let list: Review[] = [];
+      if      (Array.isArray(raw))          list = raw;
+      else if (Array.isArray(raw.reviews))  list = raw.reviews;
+      else if (Array.isArray(raw.results))  list = raw.results;
+      else if (Array.isArray(raw.data))     list = raw.data;
+
+      if (list.length > 0) {
+        setReviews(list);
+      }
+    } catch {
+      // Reload silencioso — se falhar, a review inserida localmente permanece
+    }
+  };
+
+  // ── Criar review ──────────────────────────────────────────────────────────
   // POST /api/locals/{id}/reviews/ ou POST /api/services/{id}/reviews/
   // body: { rating: 1-5, comment: string }  (campos exactos do schema)
   const handleSubmit = async () => {
@@ -84,6 +127,7 @@ export default function ReviewManager({
         ? await reviewsApi.createForLocal(resourceId, body)
         : await reviewsApi.createForService(resourceId, body);
 
+    if (!mountedRef.current) return;
     setSubmitting(false);
 
     if (resp.error) {
@@ -91,8 +135,7 @@ export default function ReviewManager({
       return;
     }
 
-    // Inserir a review criada no topo da lista
-    // A API devolve o LocalReview/ServiceReview criado
+    // Inserir optimisticamente a review criada no topo
     if (resp.data) {
       const created = ((resp.data as any).review ?? resp.data) as Review;
       if ((created as any)?.id) {
@@ -104,32 +147,62 @@ export default function ReviewManager({
     setRating(5);
     setComment('');
     onReviewsUpdated?.();
+
+    // Recarregar do backend em background para confirmar persistência
+    reloadFromBackend();
   };
 
-  // ── Marcar como útil ─────────────────────────────────────────────────────────
-  // POST /api/reviews/{id}/helpful/
+  // ── Marcar como útil ──────────────────────────────────────────────────────
+  // POST /api/reviews/{id}/helpful/ → ReviewHelpfulResponse { success, helpfulCount }
+  // hasMarkedHelpful não vem do OpenAPI — é estado local do frontend.
   const handleMarkHelpful = async (id: string) => {
     const review = reviews.find(r => r.id === id);
     if (!review) return;
 
-    const wasHelpful = (review as LocalReview).hasMarkedHelpful ?? false;
+    const wasHelpful = (review as any).hasMarkedHelpful ?? false;
 
     // Optimistic update
     setReviews(prev => prev.map(r =>
       r.id === id
-        ? { ...r, hasMarkedHelpful: !wasHelpful, helpful: wasHelpful ? Math.max(0, (r.helpful || 1) - 1) : (r.helpful || 0) + 1 }
-        : r
+        ? {
+            ...r,
+            hasMarkedHelpful: !wasHelpful,
+            helpful: wasHelpful
+              ? Math.max(0, ((r as any).helpful ?? 1) - 1)
+              : ((r as any).helpful ?? 0) + 1,
+          }
+        : r,
     ));
 
     const resp = await reviewsApi.markHelpful(id);
+
+    if (!mountedRef.current) return;
+
     if (resp.error && !resp.error.includes('404')) {
       // Rollback
       setReviews(prev => prev.map(r =>
         r.id === id
-          ? { ...r, hasMarkedHelpful: wasHelpful, helpful: wasHelpful ? (r.helpful || 0) + 1 : Math.max(0, (r.helpful || 1) - 1) }
-          : r
+          ? {
+              ...r,
+              hasMarkedHelpful: wasHelpful,
+              helpful: wasHelpful
+                ? ((r as any).helpful ?? 0) + 1
+                : Math.max(0, ((r as any).helpful ?? 1) - 1),
+            }
+          : r,
       ));
       setError(resp.error);
+      return;
+    }
+
+    // Confirmar com helpfulCount real da API
+    // ReviewHelpfulResponse: { success, helpfulCount }
+    if (resp.data?.helpfulCount !== undefined) {
+      setReviews(prev => prev.map(r =>
+        r.id === id
+          ? { ...r, helpful: resp.data!.helpfulCount, hasMarkedHelpful: !wasHelpful }
+          : r,
+      ));
     }
   };
 
@@ -260,7 +333,7 @@ export default function ReviewManager({
               <div className="flex gap-2">
                 <motion.button
                   whileTap={{ scale: 0.98 }}
-                  onClick={() => { setReportingReview(null); setReportReason(''); alert('Denúncia enviada'); }}
+                  onClick={() => { setReportingReview(null); setReportReason(''); }}
                   className="flex-1 py-3 rounded-xl text-sm font-bold text-white"
                   style={{ background: '#DC2626' }}
                 >

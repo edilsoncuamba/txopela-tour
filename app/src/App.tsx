@@ -18,11 +18,14 @@ import { AuthProvider, useAuth } from '@/context/AuthContext';
 import { AppProvider } from '@/context/AppContext';
 import { TourismProvider } from '@/context/TourismContext';
 import { FavoritesProvider } from '@/context/FavoritesContext';
+import { PostsProvider } from '@/context/PostsContext';
 import { ThemeProvider, useTheme, AppShell } from '@/context/ThemeContext';
 import { MapProvider, useMapContext } from '@/context/MapContext';
 
 // Services
 import { postsApi } from '@/services/api';
+import { PLACEHOLDER_IMAGE } from '@/utils/dataValidation';
+import { shouldShowSuggestScreen } from '@/utils/permissions';
 
 // Components
 import BottomNav from '@/components/BottomNav';
@@ -67,6 +70,7 @@ import NotificationSettings from '@/pages/NotificationSettings';
 import PrivacySettings from '@/pages/PrivacySettings';
 import PublicProfile from '@/pages/PublicProfile';
 import EditPost from '@/pages/EditPost';
+import SuggestScreen from '@/pages/SuggestScreen';
 // Approver legacy removido — usar ApuradorDashboard
 
 // Types
@@ -114,7 +118,8 @@ function MapServiceDetail({ pin, onBack }: { pin: PlacePin; onBack: () => void }
       <div className="max-w-2xl mx-auto px-4 pt-4 pb-20 space-y-4">
         {pin.image && (
           <div className="rounded-2xl overflow-hidden shadow-md" style={{ height: 200 }}>
-            <img src={pin.image} alt={pin.name} className="w-full h-full object-cover" />
+            <img src={pin.image} alt={pin.name} className="w-full h-full object-cover"
+              onError={e => { (e.target as HTMLImageElement).src = PLACEHOLDER_IMAGE; }} />
           </div>
         )}
         <div className="bg-white rounded-2xl p-4 shadow-sm">
@@ -185,7 +190,8 @@ function MapPostDetail({
         <div className="max-w-2xl mx-auto px-4 pt-4 pb-20 space-y-4">
           {pin.image && (
             <div className="rounded-2xl overflow-hidden shadow-md" style={{ height: 220 }}>
-              <img src={pin.image} alt={pin.name} className="w-full h-full object-cover" />
+              <img src={pin.image} alt={pin.name} className="w-full h-full object-cover"
+                onError={e => { (e.target as HTMLImageElement).src = PLACEHOLDER_IMAGE; }} />
             </div>
           )}
           <div className="bg-white rounded-2xl p-4 shadow-sm">
@@ -313,6 +319,16 @@ function AppContent() {
   const [showCulture, setShowCulture] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 
+  /**
+   * Sub-fluxo de sugestão — apenas para LOCAL_BUSINESS no tab 'add'.
+   * null       → mostra SuggestScreen (seleção)
+   * 'local'    → abre AddLocal
+   * 'service'  → abre AddService
+   * 'post'     → abre AddPost
+   * Quando activeTab !== 'add', este estado é ignorado.
+   */
+  const [suggestFlow, setSuggestFlow] = useState<'local' | 'service' | 'post' | null>(null);
+
   // ── Detalhe a partir do mapa — pin seleccionado e dados do post ────────────
   const [mapDetail,            setMapDetail]            = useState<PlacePin | null>(null);
   const [mapPostDetailData,    setMapPostDetailData]    = useState<any | null>(null);
@@ -330,19 +346,13 @@ function AppContent() {
    * - Se o post tiver localização válida, navega para o tab do mapa.
    * - Caso contrário, vai para o home como antes.
    */
-  const handleAddPostSuccess = useCallback((postId?: string, hasLocation?: boolean) => {
+  const handleAddPostSuccess = useCallback((_postId?: string, _hasLocation?: boolean) => {
     setShowAddPost(false);
+    setSuggestFlow(null);
     setHomeRefreshKey(prev => prev + 1);
-    if (postId) setNewPostId(postId);
-    if (hasLocation && postId) {
-      // Notificar o MapContext — o mapa vai recarregar e fazer zoom
-      notifyNewResource('post', postId);
-      setShowCulture(false);
-      setActiveTab('map');
-    } else {
-      setActiveTab('home');
-    }
-  }, [notifyNewResource]);
+    // Sempre navegar directo ao home, sem passar pelo mapa ou detalhes do post
+    setActiveTab('home');
+  }, []);
 
   /**
    * Chamado pelo Map quando o utilizador clica num pin ou card.
@@ -427,6 +437,7 @@ function AppContent() {
     setShowNotifications(false);
     setShowSettings(false);
     setSelectedAuthor(null);
+    setAuthScreen('login');  // garante que o destino é sempre Login, independentemente de como o utilizador entrou
     setActiveTab('home');
   };
 
@@ -441,6 +452,8 @@ function AppContent() {
     setMapDetail(null);
     setMapPostDetailData(null);
     setMapPostDetailLoading(false);
+    // Repor sub-fluxo de sugestão quando se sai do tab 'add'
+    if (tab !== 'add') setSuggestFlow(null);
     setPreviousTab(activeTab);
     setActiveTab(tab);
   };
@@ -456,6 +469,15 @@ function AppContent() {
     setSelectedLocal(null);
     setActiveTab(previousTab);
   };
+
+  // Preview de UI (dev) — permite inspeccionar ecrãs atrás do login
+  if (import.meta.env.DEV && window.location.hash === '#dev-privacy') {
+    return (
+      <AppShell>
+        <PrivacySettings onBack={() => { window.location.hash = ''; }} />
+      </AppShell>
+    );
+  }
 
   // Loading
   if (isLoading) {
@@ -550,36 +572,45 @@ function AppContent() {
   );
 
   // ── AUTH SCREENS (app normal) — sem tema, sempre claro ─────────────────────
+  // NOTA: os wrappers NÃO podem usar transform/opacity no motion.div directamente
+  // pois isso criaria um novo stacking context que confina os `position:fixed`
+  // das imagens de fundo dentro de cada tela. Usamos um div wrapper sem estilo
+  // e deixamos cada tela gerir a sua própria animação internamente.
   if (!isAuthenticated) {
     return (
-      <AnimatePresence mode="wait">
-        {authScreen === 'login' && (
-          <motion.div key="login" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
-            <Login
-              onLogin={() => { /* tratado no useEffect de role */ }}
-              onRegister={() => setAuthScreen('register')}
-              onForgotPassword={() => setAuthScreen('forgot')}
-            />
-          </motion.div>
-        )}
-        {authScreen === 'register' && (
-          <motion.div key="register" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }}>
-            <Register onRegister={() => { }} onBack={() => setAuthScreen('login')}
-              onOTPRequired={(email) => { setVerifyEmail(email); setAuthScreen('verify'); }} />
-          </motion.div>
-        )}
-        {authScreen === 'verify' && verifyEmail && (
-          <motion.div key="verify" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }}>
-            <VerifyEmail email={verifyEmail} onVerified={() => { setVerifyEmail(null); setAuthScreen('login'); }}
-              onBack={() => setAuthScreen('login')} />
-          </motion.div>
-        )}
-        {authScreen === 'forgot' && (
-          <motion.div key="forgot" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }}>
-            <ForgotPassword onBack={() => setAuthScreen('login')} />
-          </motion.div>
-        )}
-      </AnimatePresence>
+      <div style={{ position: 'fixed', inset: 0, zIndex: 0 }}>
+        <AnimatePresence mode="wait">
+          {authScreen === 'login' && (
+            <div key="login" style={{ position: 'absolute', inset: 0 }}>
+              <Login
+                onLogin={() => { /* tratado no useEffect de role */ }}
+                onRegister={() => setAuthScreen('register')}
+                onForgotPassword={() => setAuthScreen('forgot')}
+              />
+            </div>
+          )}
+          {authScreen === 'register' && (
+            <div key="register" style={{ position: 'absolute', inset: 0 }}>
+              <Register
+                onRegister={() => setActiveTab('home')}
+                onBack={() => setAuthScreen('login')}
+                onOTPRequired={(email) => { setVerifyEmail(email); setAuthScreen('verify'); }}
+              />
+            </div>
+          )}
+          {authScreen === 'verify' && verifyEmail && (
+            <div key="verify" style={{ position: 'absolute', inset: 0 }}>
+              <VerifyEmail email={verifyEmail} onVerified={() => { setVerifyEmail(null); setAuthScreen('login'); }}
+                onBack={() => setAuthScreen('login')} />
+            </div>
+          )}
+          {authScreen === 'forgot' && (
+            <div key="forgot" style={{ position: 'absolute', inset: 0 }}>
+              <ForgotPassword onBack={() => setAuthScreen('login')} />
+            </div>
+          )}
+        </AnimatePresence>
+      </div>
     );
   }
 
@@ -679,8 +710,10 @@ function AppContent() {
               {/* Nav items — ordem: Início, Cultura, Mapa, Favoritos, Perfil, Sugerir */}
               <nav className="flex-1 px-2 space-y-0.5">
                 {(() => {
-                  const isBusiness = user?.type === 'business' || user?.type === 'guide';
-                  const sugerirLabel = isBusiness ? 'Sugerir serviço' : 'Sugerir local';
+                  // Usa canCreateBusiness para distinguir business (local+serviço+post)
+                  // de outros perfis (só post)
+                  const isBusiness = shouldShowSuggestScreen(user?.role, user?.type);
+                  const sugerirLabel = isBusiness ? 'Sugerir' : 'Sugerir publicação';
 
                   // Itens principais unificados (inclui Cultura na posição correcta)
                   const allItems: { key: string; label: string; onClick: () => void; isActive: () => boolean; icon: (a: boolean) => React.ReactNode }[] = [
@@ -842,29 +875,57 @@ function AppContent() {
                 transition={{ duration: 0.2, ease: 'easeOut' }}
               >
                 {activeTab === 'home' && <Home refreshKey={homeRefreshKey} sidebarCollapsed={sidebarCollapsed} onLocalPress={handleLocalPress} onNotifications={() => setShowNotifications(true)} onChat={(query) => { if (query) setChatInitialQuery(query); setShowChatbot(true); }} onMyProfile={() => setActiveTab('profile')} onAuthorPress={(author) => setSelectedAuthor(author)} onEditPost={(postId) => setEditPostId(postId)} onCulture={() => setShowCulture(true)} />}
-                {activeTab === 'explore' && <Favorites onLocalPress={handleLocalPress} onNotifications={() => setShowNotifications(true)} onChat={() => setShowChatbot(true)} />}
+                {activeTab === 'explore' && <Favorites onLocalPress={handleLocalPress} onNotifications={() => setShowNotifications(true)} onChat={() => setShowChatbot(true)} onAuthorPress={(author) => setSelectedAuthor(author)} />}
                 {activeTab === 'map' && <Map onLocalPress={handleLocalPress} onBack={() => setActiveTab('home')} newPostId={newPostId} onNewPostIdConsumed={() => setNewPostId(null)} onDetailPress={handleMapDetailPress} onAuthorPress={(author) => setSelectedAuthor(author)} />}
                 {activeTab === 'profile' && <Profile onSettings={() => setShowSettings(true)} onLocalPress={handleLocalPress} onLogout={handleLogout} onAddPost={() => setShowAddPost(true)} onEditProfile={() => setShowEditProfile(true)} onSuggest={() => setActiveTab('add')} />}
               </motion.div>
             )}
             {activeTab === 'add' && !selectedLocal && (
               <motion.div key="add" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}>
-                {(user?.type === 'business' || user?.type === 'guide') ? (
-                  <AddService onSuccess={() => { setHomeRefreshKey(prev => prev + 1); setActiveTab('home'); }} onBack={() => setActiveTab('home')} />
+                {/* Negócio: SuggestScreen (seleção) → sub-fluxo escolhido
+                    Outros perfis: vai directamente para AddPost (sem aprovação) */}
+                {shouldShowSuggestScreen(user?.role, user?.type) ? (
+                  suggestFlow === 'local'   ? (
+                    <AddLocal
+                      onSuccess={() => { setHomeRefreshKey(prev => prev + 1); setSuggestFlow(null); setActiveTab('home'); }}
+                      onBack={() => setSuggestFlow(null)}
+                    />
+                  ) : suggestFlow === 'service' ? (
+                    <AddService
+                      onSuccess={() => { setHomeRefreshKey(prev => prev + 1); setSuggestFlow(null); setActiveTab('home'); }}
+                      onBack={() => setSuggestFlow(null)}
+                    />
+                  ) : suggestFlow === 'post' ? (
+                    <AddPost
+                      onSuccess={(postId, hasLocation) => {
+                        setSuggestFlow(null);
+                        handleAddPostSuccess(postId, hasLocation);
+                      }}
+                      onBack={() => { setSuggestFlow(null); setActiveTab('home'); }}
+                    />
+                  ) : (
+                    <SuggestScreen
+                      onSuggestLocal={() => setSuggestFlow('local')}
+                      onSuggestService={() => setSuggestFlow('service')}
+                      onSuggestPost={() => setSuggestFlow('post')}
+                      onBack={() => { setSuggestFlow(null); setActiveTab('home'); }}
+                    />
+                  )
                 ) : (
-                  <AddLocal onSuccess={() => { setHomeRefreshKey(prev => prev + 1); setActiveTab('home'); }} onBack={() => setActiveTab('home')} />
+                  /* Viajante / Morador local / Guia → só publicações, sem aprovação */
+                  <AddPost onSuccess={handleAddPostSuccess} onBack={() => setActiveTab('home')} />
                 )}
               </motion.div>
             )}
             {selectedLocal && <motion.div key="detail" {...SCREEN_ANIM}><LocalDetail local={selectedLocal} onBack={handleBackFromDetail} onAuthorPress={(author) => { setSelectedLocal(null); setSelectedAuthor(author); }} /></motion.div>}
-            {showFavorites && <motion.div key="favorites" {...SCREEN_ANIM}><Favorites onLocalPress={handleLocalPress} onNotifications={() => { setShowFavorites(false); setShowNotifications(true); }} onChat={() => { setShowFavorites(false); setShowChatbot(true); }} /></motion.div>}
+            {showFavorites && <motion.div key="favorites" {...SCREEN_ANIM}><Favorites onLocalPress={handleLocalPress} onNotifications={() => { setShowFavorites(false); setShowNotifications(true); }} onChat={() => { setShowFavorites(false); setShowChatbot(true); }} onAuthorPress={(author) => { setShowFavorites(false); setSelectedAuthor(author); }} /></motion.div>}
             {showNotifications && <motion.div key="notifications" {...SCREEN_ANIM}><Notifications onNotifications={() => setShowNotifications(false)} onChat={() => { setShowNotifications(false); setShowChatbot(true); }} /></motion.div>}
             {showChatbot && <motion.div key="chatbot" {...SCREEN_ANIM}><Chatbot onBack={() => { setShowChatbot(false); setChatInitialQuery(undefined); }} initialQuery={chatInitialQuery} /></motion.div>}
             {showEditProfile && <motion.div key="edit-profile" initial={{ opacity: 1 }} animate={{ opacity: 1 }} exit={{ opacity: 1 }} className="fixed inset-0 z-[60] bg-white overflow-y-auto"><EditProfile onBack={() => setShowEditProfile(false)} /></motion.div>}
             {showAddPost && <motion.div key="add-post" {...SCREEN_ANIM}><AddPost onBack={() => setShowAddPost(false)} onSuccess={handleAddPostSuccess} /></motion.div>}
             {editPostId && <motion.div key="edit-post" {...SCREEN_ANIM}><EditPost postId={editPostId} onBack={() => setEditPostId(null)} onSuccess={() => { setEditPostId(null); setHomeRefreshKey(prev => prev + 1); }} /></motion.div>}
             {showNotificationSettings && <motion.div key="notif-settings" initial={{ opacity: 1 }} animate={{ opacity: 1 }} exit={{ opacity: 1 }} className="fixed inset-0 z-[60] bg-white overflow-y-auto"><NotificationSettings onBack={() => setShowNotificationSettings(false)} /></motion.div>}
-            {showPrivacySettings && <motion.div key="privacy" initial={{ opacity: 1 }} animate={{ opacity: 1 }} exit={{ opacity: 1 }} className="fixed inset-0 z-[60] bg-white overflow-y-auto"><PrivacySettings onBack={() => setShowPrivacySettings(false)} /></motion.div>}
+            {showPrivacySettings && <motion.div key="privacy" initial={{ opacity: 1 }} animate={{ opacity: 1 }} exit={{ opacity: 1 }} className="fixed inset-0 z-[60] overflow-y-auto" style={{ background: isDark ? '#0F1117' : '#F5F5F0' }}><PrivacySettings onBack={() => setShowPrivacySettings(false)} /></motion.div>}
             {showSettings && <div key="settings" className="fixed inset-0 bg-white overflow-y-auto" style={{ zIndex: 50 }}><Settings onBack={() => setShowSettings(false)} onLogout={handleLogout} onViewProfile={() => { setShowSettings(false); setActiveTab('profile'); }} onEditProfile={() => setShowEditProfile(true)} onNotifications={() => setShowNotificationSettings(true)} onPrivacy={() => setShowPrivacySettings(true)} /></div>}
             {showBookings && <motion.div key="bookings" {...SCREEN_ANIM}><Bookings onBack={() => setShowBookings(false)} onLocalPress={(local) => { setShowBookings(false); handleLocalPress(local); }} /></motion.div>}
             {bookingLocal && <motion.div key="booking-form" {...SCREEN_ANIM}><BookingForm local={bookingLocal} onBack={() => setBookingLocal(null)} onSuccess={() => { setBookingLocal(null); setShowBookings(true); }} /></motion.div>}
@@ -891,6 +952,7 @@ function AppContent() {
                   }}
                   onBack={handleMapDetailBack}
                   onExploreMore={handleMapDetailBack}
+                  onAuthorPress={(author) => { handleMapDetailBack(); setSelectedAuthor(author); }}
                 />
               </motion.div>
             )}
@@ -943,6 +1005,7 @@ function AppContent() {
                   onLocalPress={handleLocalPress}
                   onNotifications={() => setShowNotifications(true)}
                   onChat={() => setShowChatbot(true)}
+                  onAuthorPress={(author) => setSelectedAuthor(author)}
                 />
               )}
               {activeTab === 'map' && (
@@ -970,24 +1033,51 @@ function AppContent() {
 
           {activeTab === 'add' && !selectedLocal && (
             <motion.div key="add" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 20 }}>
-              {(user?.type === 'business' || user?.type === 'guide') ? (
-                <AddService onSuccess={() => { setHomeRefreshKey(prev => prev + 1); setActiveTab('home'); }} onBack={() => setActiveTab('home')} />
+              {/* Negócio mobile: SuggestScreen → sub-fluxo
+                  Outros perfis: vai directamente para AddPost (sem aprovação) */}
+              {shouldShowSuggestScreen(user?.role, user?.type) ? (
+                suggestFlow === 'local'   ? (
+                  <AddLocal
+                    onSuccess={() => { setHomeRefreshKey(prev => prev + 1); setSuggestFlow(null); setActiveTab('home'); }}
+                    onBack={() => setSuggestFlow(null)}
+                  />
+                ) : suggestFlow === 'service' ? (
+                  <AddService
+                    onSuccess={() => { setHomeRefreshKey(prev => prev + 1); setSuggestFlow(null); setActiveTab('home'); }}
+                    onBack={() => setSuggestFlow(null)}
+                  />
+                ) : suggestFlow === 'post' ? (
+                  <AddPost
+                    onSuccess={(postId, hasLocation) => {
+                      setSuggestFlow(null);
+                      handleAddPostSuccess(postId, hasLocation);
+                    }}
+                    onBack={() => { setSuggestFlow(null); setActiveTab('home'); }}
+                  />
+                ) : (
+                  <SuggestScreen
+                    onSuggestLocal={() => setSuggestFlow('local')}
+                    onSuggestService={() => setSuggestFlow('service')}
+                    onSuggestPost={() => setSuggestFlow('post')}
+                    onBack={() => { setSuggestFlow(null); setActiveTab('home'); }}
+                  />
+                )
               ) : (
-                <AddLocal onSuccess={() => { setHomeRefreshKey(prev => prev + 1); setActiveTab('home'); }} onBack={() => setActiveTab('home')} />
+                <AddPost onSuccess={handleAddPostSuccess} onBack={() => setActiveTab('home')} />
               )}
             </motion.div>
           )}
 
           {selectedLocal && <motion.div key="detail" {...SCREEN_ANIM}><LocalDetail local={selectedLocal} onBack={handleBackFromDetail} onAuthorPress={(author) => { setSelectedLocal(null); setSelectedAuthor(author); }} /></motion.div>}
-          {showFavorites && <motion.div key="favorites" {...SCREEN_ANIM}><Favorites onLocalPress={handleLocalPress} onNotifications={() => { setShowFavorites(false); setShowNotifications(true); }} onChat={() => { setShowFavorites(false); setShowChatbot(true); }} /></motion.div>}
+          {showFavorites && <motion.div key="favorites" {...SCREEN_ANIM}><Favorites onLocalPress={handleLocalPress} onNotifications={() => { setShowFavorites(false); setShowNotifications(true); }} onChat={() => { setShowFavorites(false); setShowChatbot(true); }} onAuthorPress={(author) => { setShowFavorites(false); setSelectedAuthor(author); }} /></motion.div>}
           {showNotifications && <motion.div key="notifications" {...SCREEN_ANIM}><Notifications onNotifications={() => setShowNotifications(false)} onChat={() => { setShowNotifications(false); setShowChatbot(true); }} /></motion.div>}
           {showChatbot && <motion.div key="chatbot" {...SCREEN_ANIM}><Chatbot onBack={() => { setShowChatbot(false); setChatInitialQuery(undefined); }} initialQuery={chatInitialQuery} /></motion.div>}
-          {showSmartSearch && <motion.div key="smartsearch" {...SCREEN_ANIM}><SmartSearch onBack={() => setShowSmartSearch(false)} onLocalPress={handleLocalPress} /></motion.div>}
+          {showSmartSearch && <motion.div key="smartsearch" {...SCREEN_ANIM}><SmartSearch onBack={() => setShowSmartSearch(false)} onLocalPress={handleLocalPress} onAuthorPress={(author) => { setShowSmartSearch(false); setSelectedAuthor(author); }} /></motion.div>}
           {showEditProfile && <motion.div key="edit-profile" initial={{ opacity: 1 }} animate={{ opacity: 1 }} exit={{ opacity: 1 }} className="fixed inset-0 z-[60] bg-white overflow-y-auto"><EditProfile onBack={() => setShowEditProfile(false)} /></motion.div>}
           {showAddPost && <motion.div key="add-post" {...SCREEN_ANIM}><AddPost onBack={() => setShowAddPost(false)} onSuccess={handleAddPostSuccess} /></motion.div>}
           {editPostId && <motion.div key="edit-post" {...SCREEN_ANIM}><EditPost postId={editPostId} onBack={() => setEditPostId(null)} onSuccess={() => { setEditPostId(null); setHomeRefreshKey(prev => prev + 1); }} /></motion.div>}
           {showNotificationSettings && <motion.div key="notif-settings" initial={{ opacity: 1 }} animate={{ opacity: 1 }} exit={{ opacity: 1 }} className="fixed inset-0 z-[60] bg-white overflow-y-auto"><NotificationSettings onBack={() => setShowNotificationSettings(false)} /></motion.div>}
-          {showPrivacySettings && <motion.div key="privacy" initial={{ opacity: 1 }} animate={{ opacity: 1 }} exit={{ opacity: 1 }} className="fixed inset-0 z-[60] bg-white overflow-y-auto"><PrivacySettings onBack={() => setShowPrivacySettings(false)} /></motion.div>}
+          {showPrivacySettings && <motion.div key="privacy" initial={{ opacity: 1 }} animate={{ opacity: 1 }} exit={{ opacity: 1 }} className="fixed inset-0 z-[60] overflow-y-auto" style={{ background: isDark ? '#0F1117' : '#F5F5F0' }}><PrivacySettings onBack={() => setShowPrivacySettings(false)} /></motion.div>}
           {showSettings && <div key="settings" className="fixed inset-0 bg-white overflow-y-auto" style={{ zIndex: 50 }}><Settings onBack={() => setShowSettings(false)} onLogout={handleLogout} onViewProfile={() => { setShowSettings(false); setActiveTab('profile'); }} onEditProfile={() => setShowEditProfile(true)} onNotifications={() => setShowNotificationSettings(true)} onPrivacy={() => setShowPrivacySettings(true)} /></div>}
           {showBookings && <motion.div key="bookings" {...SCREEN_ANIM}><Bookings onBack={() => setShowBookings(false)} onLocalPress={(local) => { setShowBookings(false); handleLocalPress(local); }} /></motion.div>}
           {bookingLocal && <motion.div key="booking-form" {...SCREEN_ANIM}><BookingForm local={bookingLocal} onBack={() => setBookingLocal(null)} onSuccess={() => { setBookingLocal(null); setShowBookings(true); }} /></motion.div>}
@@ -1014,6 +1104,7 @@ function AppContent() {
                 }}
                 onBack={handleMapDetailBack}
                 onExploreMore={handleMapDetailBack}
+                onAuthorPress={(author) => { handleMapDetailBack(); setSelectedAuthor(author); }}
               />
             </motion.div>
           )}
@@ -1037,7 +1128,7 @@ function AppContent() {
 
         {/* Bottom nav — mobile only */}
         {!selectedLocal && !showFavorites && !showNotifications && !showChatbot && !showSmartSearch && !showSettings && !showEditProfile && !showProfileView && !showNotificationSettings && !showPrivacySettings && !showBookings && !bookingLocal && !showChat && !selectedAuthor && !showAddPost && !editPostId && !mapDetail && activeTab !== 'add' && (
-          <BottomNav activeTab={showCulture ? 'culture' : activeTab} onTabChange={handleTabChange} />
+          <BottomNav activeTab={showCulture ? 'culture' : activeTab} onTabChange={handleTabChange} addLabel="Sugerir" />
         )}
       </div>
     </AppShell>
@@ -1051,11 +1142,13 @@ function App() {
       <AuthProvider>
         <MapProvider>
           <AppProvider>
-            <FavoritesProvider>
-            <TourismProvider>
-              <AppContent />
-            </TourismProvider>
-            </FavoritesProvider>
+            <PostsProvider>
+              <FavoritesProvider>
+                <TourismProvider>
+                  <AppContent />
+                </TourismProvider>
+              </FavoritesProvider>
+            </PostsProvider>
           </AppProvider>
         </MapProvider>
       </AuthProvider>

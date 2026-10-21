@@ -12,9 +12,26 @@ interface LoginApuradorProps {
 }
 
 const slides = [
-  { image: '/images/local-2.jpg', caption: 'Ilha de Moçambique, Nampula' },
-  { image: '/images/local-3.jpg', caption: 'Reserva do Niassa' },
-  { image: '/images/local-5.jpg', caption: 'Vilankulo, Inhambane' },
+  {
+    image: '/images/provincias_profile/inhambane.jpeg',
+    province: 'Inhambane',
+    caption: 'Arquipélago do Bazaruto',
+  },
+  {
+    image: '/images/provincias_profile/nampula.jpeg',
+    province: 'Nampula',
+    caption: 'Ilha de Moçambique',
+  },
+  {
+    image: '/images/provincias_profile/maputo_provicnia.jpeg',
+    province: 'Maputo',
+    caption: 'Ponta de Ouro',
+  },
+  {
+    image: '/images/provincias_profile/tete.jpg',
+    province: 'Tete',
+    caption: 'Cahora Bassa',
+  },
 ];
 
 export default function LoginApurador({
@@ -26,12 +43,29 @@ export default function LoginApurador({
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError]         = useState('');
   const [slide, setSlide]         = useState(0);
-  const { login } = useAuth();
+  // Aguardar confirmação do role após login bem-sucedido
+  const [waitingForUser, setWaitingForUser] = useState(false);
+  const { login, user } = useAuth();
 
   useEffect(() => {
     const t = setInterval(() => setSlide(s => (s + 1) % slides.length), 5000);
     return () => clearInterval(t);
   }, []);
+
+  // Quando o AuthContext definir o user após login, verificar o role
+  useEffect(() => {
+    if (!waitingForUser || !user) return;
+
+    setWaitingForUser(false);
+    setIsLoading(false);
+
+    const role = user.role || '';
+    if (role === 'curator' || role === 'admin') {
+      onSuccess();
+    } else {
+      onWrongRole();
+    }
+  }, [waitingForUser, user]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -48,15 +82,16 @@ export default function LoginApurador({
 
       if (!result.ok) {
         setError(result.error ?? 'Credenciais inválidas.');
+        setIsLoading(false);
         return;
       }
 
-      // O AuthContext actualiza user assincronamente — aguarda um tick
-      await new Promise(r => setTimeout(r, 100));
+      // Login bem-sucedido — aguardar que o AuthContext defina user (via useEffect acima)
+      // isLoading permanece true enquanto aguardamos o role
+      setWaitingForUser(true);
 
     } catch {
       setError('Erro inesperado. Tenta novamente.');
-    } finally {
       setIsLoading(false);
     }
   };
@@ -70,13 +105,18 @@ export default function LoginApurador({
       {/* Fundo */}
       <AnimatePresence mode="sync">
         <motion.img key={current.image} src={current.image} alt={current.caption}
-          className="absolute inset-0 w-full h-full object-cover"
+          className="fixed inset-0 w-full h-full object-cover object-center"
           initial={{ opacity: 0, scale: 1.04 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0 }}
-          transition={{ duration: 1.2 }} />
+          transition={{ duration: 1.2, ease: 'easeInOut' }} />
       </AnimatePresence>
-      <div className="absolute inset-0" style={{
-        background: 'linear-gradient(105deg, rgba(10,35,20,0.88) 0%, rgba(10,35,20,0.65) 50%, rgba(5,25,15,0.50) 100%)',
+      <div className="fixed inset-0" style={{
+        background: 'linear-gradient(105deg, rgba(5,30,15,0.82) 0%, rgba(5,30,15,0.60) 45%, rgba(5,20,10,0.45) 100%)',
       }} />
+      <div className="fixed inset-0" style={{
+        background: 'radial-gradient(ellipse at center, transparent 40%, rgba(0,0,0,0.45) 100%)',
+      }} />
+
+
 
       {/* Logo */}
       <div className="absolute top-8 left-10 hidden md:flex items-center gap-2.5 z-20">

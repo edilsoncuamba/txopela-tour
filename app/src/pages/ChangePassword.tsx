@@ -4,36 +4,24 @@ import { ArrowLeft, Lock, Eye, EyeOff, CheckCircle, AlertCircle, Loader2 } from 
 import { usersApi } from '@/services/api';
 import { useScrollTop } from '@/hooks/useScrollTop';
 
-const BRAND   = '#1B5E3B';
-const BLUE    = '#0077B6';
-const BG      = '#F5F5F0';
-const WHITE   = '#FFFFFF';
-const GRAY_50 = '#F8FAFC';
-const GRAY_200= '#E5E7EB';
-const GRAY_400= '#9CA3AF';
-const GRAY_500= '#6B7280';
-const GRAY_700= '#374151';
-const GRAY_900= '#1A1A1A';
-
 interface ChangePasswordProps {
   onBack: () => void;
 }
 
-export default function ChangePassword({
-  onBack }: ChangePasswordProps) {
+export default function ChangePassword({ onBack }: ChangePasswordProps) {
   useScrollTop();
   const [saving, setSaving] = useState(false);
-  const [toast, setToast] = useState<{ msg: string; ok: boolean } | null>(null);
+  const [toast, setToast]   = useState<{ msg: string; ok: boolean } | null>(null);
 
   const [form, setForm] = useState({
     currentPassword: '',
-    newPassword: '',
+    newPassword:     '',
     confirmPassword: '',
   });
 
   const [visibility, setVisibility] = useState({
     current: false,
-    new: false,
+    new:     false,
     confirm: false,
   });
 
@@ -46,18 +34,9 @@ export default function ChangePassword({
     setVisibility(p => ({ ...p, [field]: !p[field] }));
 
   const handleSubmit = async () => {
-    if (!form.currentPassword) {
-      showToast('Insira a senha atual', false);
-      return;
-    }
-    if (form.newPassword.length < 6) {
-      showToast('A nova senha deve ter pelo menos 6 caracteres', false);
-      return;
-    }
-    if (form.newPassword !== form.confirmPassword) {
-      showToast('As senhas não coincidem', false);
-      return;
-    }
+    if (!form.currentPassword) { showToast('Insira a senha atual', false); return; }
+    if (form.newPassword.length < 6) { showToast('A nova senha deve ter pelo menos 6 caracteres', false); return; }
+    if (form.newPassword !== form.confirmPassword) { showToast('As senhas não coincidem', false); return; }
 
     setSaving(true);
     try {
@@ -65,7 +44,6 @@ export default function ChangePassword({
         currentPassword: form.currentPassword,
         newPassword: form.newPassword,
       });
-
       if (res.error) {
         showToast(res.error, false);
       } else {
@@ -79,51 +57,61 @@ export default function ChangePassword({
     }
   };
 
-  // ── campo de senha reutilizável ──────────────────────────────────────────────
+  // ── Campo de senha reutilizável (design translúcido) ──────────────────────
   const PasswordField = ({
     label, fieldKey, placeholder,
   }: {
     label: string;
     fieldKey: 'current' | 'new' | 'confirm';
     placeholder?: string;
-  }) => (
-    <div>
-      <label
-        className="text-xs font-bold uppercase tracking-wide mb-2 block text-left"
-        style={{ color: GRAY_500 }}>
-        {label}
-      </label>
-      <div className="relative">
-        <input
-          type={visibility[fieldKey] ? 'text' : 'password'}
-          value={form[fieldKey === 'current' ? 'currentPassword' : fieldKey === 'new' ? 'newPassword' : 'confirmPassword']}
-          onChange={e =>
-            setForm(p => ({
-              ...p,
-              [fieldKey === 'current' ? 'currentPassword' : fieldKey === 'new' ? 'newPassword' : 'confirmPassword']:
-                e.target.value,
-            }))
-          }
-          placeholder={placeholder}
-          className="w-full px-4 py-3 pr-12 rounded-xl border outline-none text-sm"
-          style={{ borderColor: GRAY_200, background: GRAY_50, fontFamily: 'Nunito, sans-serif' }}
-          onFocus={e => { e.target.style.borderColor = BLUE; e.target.style.boxShadow = `0 0 0 3px ${BLUE}18`; }}
-          onBlur={e =>  { e.target.style.borderColor = GRAY_200; e.target.style.boxShadow = 'none'; }}
-        />
-        <button
-          type="button"
-          onClick={() => toggle(fieldKey)}
-          className="absolute right-4 top-1/2 -translate-y-1/2"
-          style={{ color: GRAY_400, background: 'none', border: 'none', cursor: 'pointer' }}>
-          {visibility[fieldKey] ? <EyeOff size={16} /> : <Eye size={16} />}
-        </button>
+  }) => {
+    const valueKey = fieldKey === 'current' ? 'currentPassword' : fieldKey === 'new' ? 'newPassword' : 'confirmPassword';
+    return (
+      <div>
+        <label className="block text-xs font-semibold mb-1.5 text-left"
+          style={{ color: 'rgba(255,255,255,0.85)' }}>
+          {label}
+        </label>
+        <div
+          className="flex items-center gap-3 px-4 py-3 rounded-xl border transition-all duration-200 focus-within:border-white focus-within:shadow-[0_0_0_3px_rgba(255,255,255,0.2)]"
+          style={{ background: 'rgba(255,255,255,0.18)', borderColor: 'rgba(255,255,255,0.3)', overflow: 'hidden' }}
+        >
+          <Lock size={15} style={{ color: 'rgba(255,255,255,0.6)', flexShrink: 0 }} />
+          <input
+            type={visibility[fieldKey] ? 'text' : 'password'}
+            value={form[valueKey]}
+            onChange={e => setForm(p => ({ ...p, [valueKey]: e.target.value }))}
+            placeholder={placeholder}
+            className="auth-input flex-1 text-sm focus:outline-none placeholder:text-white/40"
+            style={{
+              color: 'white',
+              background: 'transparent',
+              backgroundColor: 'transparent',
+              boxShadow: 'none',
+              caretColor: 'white',
+              colorScheme: 'dark' as any,
+              border: 'none',
+              outline: 'none',
+            }}
+          />
+          <button type="button" onClick={() => toggle(fieldKey)}
+            className="flex-shrink-0 transition-opacity hover:opacity-80"
+            style={{ color: 'rgba(255,255,255,0.6)', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>
+            {visibility[fieldKey] ? <EyeOff size={15} /> : <Eye size={15} />}
+          </button>
+        </div>
       </div>
-    </div>
-  );
+    );
+  };
 
   return (
-    <div className="min-h-screen" style={{ background: BG, fontFamily: 'Nunito, sans-serif' }}>
-
+    <div
+      className="min-h-screen w-full"
+      style={{
+        background: 'linear-gradient(135deg, #0a1f10 0%, #0d2b18 50%, #0a1a0e 100%)',
+        fontFamily: 'Inter, Nunito, sans-serif',
+      }}
+    >
       {/* Toast */}
       <AnimatePresence>
         {toast && (
@@ -131,9 +119,10 @@ export default function ChangePassword({
             initial={{ opacity: 0, y: -60 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -60 }}
             className="fixed top-6 left-1/2 -translate-x-1/2 z-50 px-6 py-4 rounded-2xl shadow-lg flex items-center gap-3"
             style={{
-              background: toast.ok ? '#ECFDF5' : '#FEF2F2',
-              border: `1px solid ${toast.ok ? '#D1FAE5' : '#FECACA'}`,
-              color: toast.ok ? '#065F46' : '#991B1B',
+              background: toast.ok ? 'rgba(34,197,94,0.2)' : 'rgba(239,68,68,0.2)',
+              border: `1px solid ${toast.ok ? 'rgba(34,197,94,0.4)' : 'rgba(239,68,68,0.4)'}`,
+              backdropFilter: 'blur(16px)',
+              color: toast.ok ? '#4ADE80' : '#EF4444',
               minWidth: 300,
             }}>
             {toast.ok ? <CheckCircle size={18} /> : <AlertCircle size={18} />}
@@ -142,51 +131,74 @@ export default function ChangePassword({
         )}
       </AnimatePresence>
 
-      <div className="max-w-lg mx-auto px-6 py-8">
+      <div className="max-w-lg mx-auto px-5 py-8">
 
         {/* Header */}
         <div className="flex items-center gap-4 mb-8">
           <motion.button whileTap={{ scale: 0.95 }} onClick={onBack}
-            className="w-11 h-11 rounded-2xl flex items-center justify-center"
-            style={{ background: WHITE, border: `1px solid ${GRAY_200}`, cursor: 'pointer' }}>
-            <ArrowLeft size={20} color={GRAY_700} />
+            className="w-11 h-11 rounded-2xl flex items-center justify-center transition-all"
+            style={{
+              background: 'rgba(255,255,255,0.12)',
+              border: '1px solid rgba(255,255,255,0.2)',
+              cursor: 'pointer',
+            }}>
+            <ArrowLeft size={20} color="white" />
           </motion.button>
           <div>
-            <h1 className="text-2xl font-black text-left" style={{ color: GRAY_900 }}>Alterar Senha</h1>
-            <p className="text-sm text-left" style={{ color: GRAY_500 }}>Defina uma nova senha para a sua conta</p>
+            <h1 className="text-2xl font-black text-left" style={{ color: 'white' }}>Alterar Senha</h1>
+            <p className="text-sm text-left" style={{ color: 'rgba(255,255,255,0.6)' }}>
+              Defina uma nova senha para a sua conta
+            </p>
           </div>
         </div>
 
         {/* Card */}
-        <div className="bg-white rounded-2xl p-6 shadow-sm" style={{ border: `1px solid ${GRAY_200}` }}>
-
+        <div
+          className="rounded-3xl p-6"
+          style={{
+            background: 'rgba(255,255,255,0.12)',
+            backdropFilter: 'blur(24px)',
+            WebkitBackdropFilter: 'blur(24px)',
+            border: '1px solid rgba(255,255,255,0.2)',
+            boxShadow: '0 8px 32px rgba(0,0,0,0.3)',
+          }}
+        >
+          {/* Info header */}
           <div className="flex items-center gap-3 mb-6">
             <div className="w-10 h-10 rounded-2xl flex items-center justify-center"
-              style={{ background: `${BLUE}12` }}>
-              <Lock size={18} color={BLUE} />
+              style={{ background: 'rgba(43,181,200,0.15)', border: '1px solid rgba(43,181,200,0.2)' }}>
+              <Lock size={18} style={{ color: '#7DDCE8' }} />
             </div>
             <div>
-              <p className="text-sm font-black text-left" style={{ color: GRAY_900 }}>Segurança da conta</p>
-              <p className="text-xs text-left" style={{ color: GRAY_500 }}>Use uma senha forte com pelo menos 6 caracteres</p>
+              <p className="text-sm font-black text-left" style={{ color: 'white' }}>Segurança da conta</p>
+              <p className="text-xs text-left" style={{ color: 'rgba(255,255,255,0.55)' }}>
+                Use uma senha forte com pelo menos 6 caracteres
+              </p>
             </div>
           </div>
 
-          <div className="space-y-5 mb-8">
-            <PasswordField label="Senha Atual *" fieldKey="current" />
-            <PasswordField label="Nova Senha *" fieldKey="new" placeholder="Mín. 6 caracteres" />
+          <div className="space-y-4 mb-8">
+            <PasswordField label="Senha Atual *"          fieldKey="current" />
+            <PasswordField label="Nova Senha *"           fieldKey="new"     placeholder="Mín. 6 caracteres" />
             <PasswordField label="Confirmar Nova Senha *" fieldKey="confirm" />
           </div>
 
           <div className="flex gap-3">
             <motion.button whileTap={{ scale: 0.97 }} onClick={onBack}
-              className="flex-1 py-3 rounded-xl text-sm font-bold"
-              style={{ border: `1.5px solid ${GRAY_200}`, background: WHITE, color: GRAY_700, cursor: 'pointer' }}>
+              className="flex-1 py-3 rounded-xl text-sm font-bold transition-all"
+              style={{
+                border: '1.5px solid rgba(255,255,255,0.2)',
+                background: 'rgba(255,255,255,0.08)',
+                color: 'rgba(255,255,255,0.7)',
+                cursor: 'pointer',
+              }}>
               Cancelar
             </motion.button>
             <motion.button whileTap={{ scale: 0.97 }} onClick={handleSubmit} disabled={saving}
-              className="flex-[2] py-3 rounded-xl text-white text-sm font-bold flex items-center justify-center gap-2"
+              className="flex-[2] py-3 rounded-xl text-white text-sm font-bold flex items-center justify-center gap-2 transition-all"
               style={{
-                background: saving ? GRAY_400 : `linear-gradient(135deg, ${BRAND}, #2BB5C8)`,
+                background: saving ? 'rgba(255,255,255,0.15)' : 'linear-gradient(135deg, #0F4C2A, #1B7A45)',
+                boxShadow: saving ? 'none' : '0 4px 18px rgba(15,76,42,0.38)',
                 cursor: saving ? 'not-allowed' : 'pointer',
                 opacity: saving ? 0.7 : 1,
               }}>

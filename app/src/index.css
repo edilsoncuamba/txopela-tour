@@ -91,7 +91,79 @@
   * {
     @apply border-border;
   }
+
+  /* ── Auth: inputs sem fundo + autofill neutralizado ───────────────────
+     Classe auth-input — usada em todos os ecrãs de auth/cadastro.
+     Classe login-input — alias mantido para retrocompatibilidade.
+  ────────────────────────────────────────────────────────────────────── */
+  .auth-input,
+  .login-input {
+    background: transparent !important;
+    background-color: transparent !important;
+    -webkit-appearance: none;
+    -moz-appearance: none;
+    appearance: none;
+    box-shadow: none !important;
+    outline: none;
+    border: none !important;
+    color: white !important;
+    caret-color: white !important;
+    color-scheme: dark;
+  }
+
+  /* Autofill: box-shadow inset transparente impede o fundo azul/branco do browser */
+  .auth-input:-webkit-autofill,
+  .auth-input:-webkit-autofill:hover,
+  .auth-input:-webkit-autofill:focus,
+  .auth-input:-webkit-autofill:active,
+  .login-input:-webkit-autofill,
+  .login-input:-webkit-autofill:hover,
+  .login-input:-webkit-autofill:focus,
+  .login-input:-webkit-autofill:active {
+    -webkit-text-fill-color: white !important;
+    -webkit-box-shadow: 0 0 0 1000px transparent inset !important;
+    box-shadow: 0 0 0 1000px transparent inset !important;
+    background: transparent !important;
+    background-color: transparent !important;
+    caret-color: white !important;
+    /* atrasa a transição de cor para 9999s — o browser não consegue reverter */
+    transition: background-color 9999s ease-in-out 0s;
+  }
   
+  /* ── auth-input alargado: textarea e select ────────────────────────────
+     O auth-input já cobre <input>. Aqui cobrimos <textarea> e <select>
+     dentro de ecrãs de auth para o mesmo tratamento de fundo/autofill.
+  ─────────────────────────────────────────────────────────────────────── */
+  textarea.auth-input {
+    background: transparent !important;
+    background-color: transparent !important;
+    color: white !important;
+    caret-color: white !important;
+    box-shadow: none !important;
+    border: none !important;
+    outline: none;
+    resize: none;
+  }
+
+  select.auth-input {
+    background: transparent !important;
+    background-color: transparent !important;
+    color: white !important;
+    box-shadow: none !important;
+    border: none !important;
+    outline: none;
+    -webkit-appearance: none;
+    -moz-appearance: none;
+    appearance: none;
+    color-scheme: dark;
+  }
+
+  /* Opções do select — fundo escuro para legibilidade */
+  select.auth-input option {
+    background-color: #1a2e1a;
+    color: white;
+  }
+
   html {
     scroll-behavior: smooth;
     -webkit-font-smoothing: antialiased;

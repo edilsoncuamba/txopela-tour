@@ -4,6 +4,7 @@ import { ChevronLeft, Calendar, Users, DollarSign, Check } from 'lucide-react';
 import { servicesApi } from '@/services/api';
 import type { Local } from '@/types';
 import { useScrollTop } from '@/hooks/useScrollTop';
+import { PLACEHOLDER_IMAGE } from '@/utils/dataValidation';
 
 interface BookingFormProps {
   local: Local;
@@ -120,7 +121,8 @@ export default function BookingForm({
           {/* Location Preview */}
           <div className="bg-white rounded-lg overflow-hidden">
             {local.images?.[0] && (
-              <img src={local.images[0]} alt={local.name} className="w-full h-48 object-cover" />
+              <img src={local.images[0]} alt={local.name} className="w-full h-48 object-cover"
+                onError={e => { (e.target as HTMLImageElement).src = PLACEHOLDER_IMAGE; }} />
             )}
             <div className="p-4">
               <h2 className="text-xl font-bold text-gray-900">{local.name}</h2>

@@ -5,6 +5,9 @@ import { motion } from 'framer-motion';
 import { ChevronLeft } from 'lucide-react';
 import { IconStar, IconHeart } from '@/components/icons';
 import { useTheme } from '@/context/ThemeContext';
+import { useSuggest } from '@/hooks/useSuggest';
+import { useAuth } from '@/context/AuthContext';
+import { useFavorites } from '@/context/FavoritesContext';
 
 // ─── Filtros (mesmo padrão de AllDiscoveries) ─────────────────────────────────
 
@@ -59,6 +62,7 @@ interface LocalItem {
   };
   // Contribuidor — opcional, apenas se vier da API
   contributor?: {
+    id?: string;
     name: string;
     avatar?: string;
     type?: string;
@@ -68,7 +72,32 @@ interface LocalItem {
   destaques?: string[];
   images?: string[];
   [key: string]: any; // permite campos extras de mapValidLocal
-}export default function ProvinciaFeed({
+}// ── SuggestButton — POST/DELETE /api/users/{id}/follow/ (OpenAPI) ────────────
+function SuggestButton({ ownerId, currentUserId }: { ownerId: string | undefined | null; currentUserId?: string | null }) {
+  const { isSuggested, isLoading, isSelf, toggle, errorMessage } = useSuggest(ownerId ?? null, false, currentUserId);
+  if (isSelf) return null;
+  return (
+    <button
+      className="flex items-center gap-0.5 transition-colors"
+      style={{ color: isSuggested ? '#1B5E3B' : '#9CA3AF' }}
+      onClick={e => { e.stopPropagation(); toggle(); }}
+      disabled={isLoading}
+      title={errorMessage ?? undefined}
+      aria-label={isSuggested ? 'Sugerido' : 'Sugerir perfil do autor'}
+    >
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none"
+        stroke={isSuggested ? '#1B5E3B' : 'currentColor'} strokeWidth="2"
+        style={{ opacity: isLoading ? 0.5 : 1 }}>
+        <path d="M22 2L11 13" /><path d="M22 2L15 22 11 13 2 9l20-7z" />
+      </svg>
+      <span className="text-[9px] font-semibold">
+        {isLoading ? 'Sugerindo…' : isSuggested ? 'Sugerido!' : 'Sugerir'}
+      </span>
+    </button>
+  );
+}
+
+export default function ProvinciaFeed({
   provincia, onBack }: ProvinciaFeedProps) {
   useScrollTop();
   const { isDark } = useTheme();
@@ -84,16 +113,16 @@ interface LocalItem {
   const [locais, setLocais] = useState<LocalItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [selectedLocal, setSelectedLocal] = useState<LocalItem | null>(null);
-  const [liked, setLiked] = useState<Record<string, boolean>>({});
-  const [suggested, setSuggested] = useState<Record<string, boolean>>({});
+  const { user } = useAuth();
+  const { isFavorite, toggleFavorite } = useFavorites();
 
   useEffect(() => {
     const load = async () => {
       setIsLoading(true);
       try {
         const { data } = await localsApi.list({ page: 1, limit: 20, province: provincia });
-        // Documenta��o 3.1: A API devolve { success: true, locals: [...] }
-        const items: any[] = data?.locals || [];
+        // OpenAPI: GET /api/locals/ → data = array direto de LocalList
+        const items: any[] = Array.isArray(data) ? data : (data?.locals ?? data?.results ?? []);
         setLocais(
           items
             .map((item: any) => mapValidLocal(item))
@@ -186,9 +215,24 @@ interface LocalItem {
                   src={local.image}
                   alt={local.name}
                   className="w-full h-full object-cover"
+                  onError={e => { (e.target as HTMLImageElement).src = PLACEHOLDER_IMAGE; }}
                 />
                 <div className="absolute inset-0" style={{ background: 'linear-gradient(to top, rgba(0,0,0,0.4) 0%, transparent 50%)' }} />
-                
+
+                {/* Image count indicator — top right, only when multiple images */}
+                {local.images && local.images.length > 1 && (
+                  <div className="absolute top-2.5 right-2.5 flex items-center gap-1 px-2 py-1 rounded-full"
+                    style={{ background: 'rgba(0,0,0,0.55)', backdropFilter: 'blur(6px)' }}>
+                    <svg width="10" height="10" viewBox="0 0 24 24" fill="none"
+                      stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <rect x="3" y="3" width="18" height="18" rx="2"/>
+                      <circle cx="8.5" cy="8.5" r="1.5"/>
+                      <polyline points="21 15 16 10 5 21"/>
+                    </svg>
+                    <span className="text-white text-[10px] font-bold">{local.images.length}</span>
+                  </div>
+                )}
+
                 {/* Rating - bottom left */}
                 <div className="absolute bottom-3 left-3 flex items-center gap-1 px-2.5 py-1.5 rounded-full"
                   style={{ background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(8px)' }}>
@@ -228,27 +272,28 @@ interface LocalItem {
                   style={{ borderColor: dm.border }}>
                   <div className="flex items-center gap-2">
                     <button
-                      onClick={e => { e.stopPropagation(); setLiked(p => ({ ...p, [local.id]: !p[local.id] })); }}
-                      style={{ color: liked[local.id] ? '#0EA5E9' : '#9CA3AF' }}
-                    >
-                      <IconHeart size={13} fill={liked[local.id] ? 'currentColor' : 'none'} />
-                    </button>
-                    <button
-                      className="flex items-center gap-0.5 transition-colors"
-                      style={{ color: suggested[local.id] ? '#1B5E3B' : '#9CA3AF' }}
                       onClick={e => {
                         e.stopPropagation();
-                        setSuggested(p => ({ ...p, [local.id]: !p[local.id] }));
+                        toggleFavorite({
+                          id:    local.id,
+                          type:  'local',
+                          name:  local.name,
+                          image: local.image,
+                          tag:   local.category,
+                          rating: local.rating,
+                          provincia:   (local as any).provincia ?? provincia,
+                          distrito:    (local as any).distrito ?? local.distrito,
+                          categoryKey: (local as any).categoryKey,
+                          raw: local,
+                        });
                       }}
+                      style={{ color: isFavorite(local.id) ? '#0EA5E9' : '#9CA3AF' }}
+                      aria-label={isFavorite(local.id) ? 'Remover dos favoritos' : 'Adicionar aos favoritos'}
                     >
-                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none"
-                        stroke={suggested[local.id] ? '#1B5E3B' : 'currentColor'} strokeWidth="2">
-                        <path d="M22 2L11 13" /><path d="M22 2L15 22 11 13 2 9l20-7z" />
-                      </svg>
-                      <span className="text-[9px] font-semibold">
-                        {suggested[local.id] ? 'Sugerido!' : 'Sugerir'}
-                      </span>
+                      <IconHeart size={13} fill={isFavorite(local.id) ? 'currentColor' : 'none'} />
                     </button>
+                    {/* Sugerir = seguir o perfil do owner — POST /api/users/{id}/follow/ */}
+                    <SuggestButton ownerId={local.contributor?.id} currentUserId={user?.id} />
                   </div>
                   <button className="px-2.5 py-1 rounded-lg text-[9px] font-bold text-white"
                     style={{ background: '#1B5E3B' }}>

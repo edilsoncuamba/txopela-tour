@@ -49,15 +49,16 @@ export default function Header({
         }}
       />
 
-      <div className="relative flex items-center justify-between px-4 py-3.5">
+      {/* overflow-hidden garante que nenhum filho provoca scroll horizontal */}
+      <div className="relative flex items-center justify-between px-3 py-2.5 overflow-hidden">
 
-        {/* ── Lado esquerdo: back / logo ── */}
-        <div className="flex items-center gap-3">
+        {/* Lado esquerdo: back / logo — flex-1 + min-w-0 impedem overflow */}
+        <div className="flex items-center gap-2 flex-1 min-w-0">
           {showBack && (
             <motion.button
               whileTap={{ scale: 0.9 }}
               onClick={onBack}
-              className="w-10 h-10 flex items-center justify-center rounded-full transition-colors"
+              className="w-9 h-9 flex items-center justify-center rounded-full transition-colors flex-shrink-0"
               style={{ background: btnBg }}
             >
               <ChevronLeft size={20} style={{ color: iconColor }} />
@@ -65,33 +66,37 @@ export default function Header({
           )}
 
           {title ? (
-            <h1 className="text-lg font-bold" style={{ color: isDark ? '#F0F4FF' : '#111827' }}>
+            /* truncate evita que títulos longos causem overflow */
+            <h1
+              className="text-base font-bold truncate"
+              style={{ color: isDark ? '#F0F4FF' : '#111827' }}
+            >
               {title}
             </h1>
           ) : (
-            <motion.div className="flex items-center gap-2" whileHover={{ scale: 1.02 }}>
+            <motion.div className="flex items-center gap-2 min-w-0" whileHover={{ scale: 1.02 }}>
               <img
                 src="/images/Logo2.png"
                 alt="Txopela Tour Logo"
-                className="w-[40px] h-[40px] object-contain"
+                className="w-8 h-8 sm:w-10 sm:h-10 object-contain flex-shrink-0"
               />
-              <span className="font-bold text-lg bg-gradient-to-r from-[#0077B6] to-[#2D6A4F] bg-clip-text text-transparent">
+              <span className="font-bold text-base sm:text-lg bg-gradient-to-r from-[#0077B6] to-[#2D6A4F] bg-clip-text text-transparent whitespace-nowrap">
                 TxopelaTour
               </span>
             </motion.div>
           )}
         </div>
 
-        {/* ── Lado direito: chat + notificações + toggle dark ── */}
-        <div className="flex items-center gap-2">
+        {/* Lado direito: chat + notificações + toggle — flex-shrink-0 para não comprimir */}
+        <div className="flex items-center gap-1.5 flex-shrink-0 ml-2">
           {showChat && (
             <motion.button
               whileTap={{ scale: 0.9 }}
               onClick={onChat}
-              className="w-10 h-10 flex items-center justify-center rounded-full transition-colors"
+              className="w-9 h-9 flex items-center justify-center rounded-full transition-colors"
               style={{ background: btnBg }}
             >
-              <MessageCircle size={18} style={{ color: iconColor }} />
+              <MessageCircle size={17} style={{ color: iconColor }} />
             </motion.button>
           )}
 
@@ -99,17 +104,17 @@ export default function Header({
             <motion.button
               whileTap={{ scale: 0.9 }}
               onClick={onNotifications}
-              className="relative w-10 h-10 flex items-center justify-center rounded-full transition-colors"
+              className="relative w-9 h-9 flex items-center justify-center rounded-full transition-colors"
               style={{ background: btnBg }}
             >
-              <Bell size={18} style={{ color: iconColor }} />
+              <Bell size={17} style={{ color: iconColor }} />
               {unreadCount > 0 && (
                 <motion.span
                   initial={{ scale: 0 }}
                   animate={{ scale: 1 }}
-                  className="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] bg-gradient-to-r from-red-500 to-red-600 rounded-full flex items-center justify-center shadow-sm"
+                  className="absolute -top-0.5 -right-0.5 min-w-[17px] h-[17px] bg-gradient-to-r from-red-500 to-red-600 rounded-full flex items-center justify-center shadow-sm"
                 >
-                  <span className="text-[10px] font-bold text-white px-1">
+                  <span className="text-[9px] font-bold text-white px-0.5">
                     {unreadCount > 9 ? '9+' : unreadCount}
                   </span>
                 </motion.span>
@@ -117,13 +122,13 @@ export default function Header({
             </motion.button>
           )}
 
-          {/* ── Toggle dark / light ── */}
+          {/* Toggle dark / light */}
           <motion.button
             whileTap={{ scale: 0.88 }}
             onClick={toggleTheme}
             aria-label={isDark ? 'Mudar para modo claro' : 'Mudar para modo escuro'}
             aria-pressed={isDark}
-            className="w-10 h-10 flex items-center justify-center rounded-full transition-colors"
+            className="w-9 h-9 flex items-center justify-center rounded-full transition-colors"
             style={{
               background: isDark
                 ? 'rgba(56,189,248,0.15)'

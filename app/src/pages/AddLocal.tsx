@@ -1,14 +1,9 @@
-﻿import { useState, useRef } from 'react';
+import { useState, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import {
-  IconChevronLeft, IconChevronDown, IconArrowRight, IconCheck, IconClose,
-  IconMapPin, IconCamera, IconImage, IconTrash, IconStar,
-  IconMountain, IconUsers, IconEye, IconAccessible, IconTheater,
-  IconHeart, IconFlag, IconNavigation,
-  CategoryIcon, STROKE,
-} from '@/components/icons';
-import { Zap, UtensilsCrossed, Mountain, Users, Eye, Accessibility, Camera as CameraIcon, Heart, Theater, MoreHorizontal, X, Check, ChevronLeft, ChevronDown, ArrowRight, MapPin, Camera, Trash2, Image as ImageIcon, Star, Loader2, Search, Globe, PartyPopper, HeartHandshake, AlertCircle, Sun, Maximize2, DoorOpen, EyeOff, Waves, Landmark, TreePine, Utensils, Hotel, Library, ShoppingBasket, Footprints, Anchor, CloudRain, Wind, Thermometer } from 'lucide-react';
+import { Zap, UtensilsCrossed, Mountain, Users, Eye, Accessibility, Camera as CameraIcon, Heart, Theater, MoreHorizontal, X, Check, ChevronDown, ChevronLeft, ArrowRight, MapPin, Camera, Trash2, Image as ImageIcon, Loader2, AlertCircle, Sun, Maximize2, DoorOpen, EyeOff, Waves, Landmark, TreePine, Utensils, Hotel, Library, ShoppingBasket, Footprints, Anchor, CloudRain, Wind, Star, Lock } from 'lucide-react';
+import { useAuth } from '@/context/AuthContext';
 import { localsApi } from '@/services/api';
+import { canCreateBusiness, UPGRADE_MESSAGE, UPGRADE_STEPS } from '@/utils/permissions';
 import { uploadAndCache, cacheImages } from '@/utils/imageCache';
 import SubmissionSuccessScreen from '@/components/shared/SubmissionSuccessScreen';
 import { useScrollTop } from '@/hooks/useScrollTop';
@@ -63,6 +58,7 @@ const epocaOptions = [
     color: '#F4821F',
   },
 ];
+// IDs internos — enviados como labels ao API via mapeamento no handleSubmit
 const destaquesOptions = [
   { id: 'panoramica',  label: 'Vista panorâmica',   icon: <Mountain size={18} strokeWidth={1.8} /> },
   { id: 'familias',    label: 'Ideal para famílias', icon: <Users size={18} strokeWidth={1.8} /> },
@@ -75,6 +71,31 @@ const destaquesOptions = [
   { id: 'cultura',     label: 'Cultura local',       icon: <Theater size={18} strokeWidth={1.8} /> },
   { id: 'outro2',      label: 'Outro',               icon: <MoreHorizontal size={18} strokeWidth={1.8} /> },
 ];
+
+// ── Faixa de preço — valores exactos do OpenAPI ($|$$|$$$|$$$$) ──────────────
+const PRICE_OPTIONS = [
+  { value: '$',    label: 'Económico',    sub: 'Abaixo de 500 MT' },
+  { value: '$$',   label: 'Moderado',     sub: '500 – 1 500 MT' },
+  { value: '$$$',  label: 'Elevado',      sub: '1 500 – 3 000 MT' },
+  { value: '$$$$', label: 'Premium',      sub: 'Acima de 3 000 MT' },
+];
+
+// ── Comodidades — IDs enviados directamente para a API ────────────────────────
+const AMENITIES_OPTIONS = [
+  { id: 'wifi',         label: 'Wi-Fi' },
+  { id: 'parking',      label: 'Estacionamento' },
+  { id: 'sea_view',     label: 'Vista para o mar' },
+  { id: 'pool',         label: 'Piscina' },
+  { id: 'restaurant',   label: 'Restaurante' },
+  { id: 'bar',          label: 'Bar' },
+  { id: 'ac',           label: 'Ar condicionado' },
+  { id: 'accessible',   label: 'Acessível' },
+  { id: 'pet_friendly', label: 'Aceita animais' },
+  { id: 'beach_access', label: 'Acesso à praia' },
+  { id: 'tours',        label: 'Excursões' },
+  { id: 'diving',       label: 'Mergulho' },
+];
+
 const provincias = ['Niassa','Cabo Delgado','Nampula','Zambézia','Tete','Manica','Sofala','Inhambane','Gaza','Maputo Província','Cidade de Maputo'];
 
 const distritosPorProvincia: Record<string, string[]> = {
@@ -132,6 +153,14 @@ function PageHeader({ step, onBack }: { step: number; onBack: () => void }) {
     <div className="bg-white px-4 pt-5 pb-4 md:px-8">
       <div className="max-w-2xl mx-auto">
         <div className="flex items-center gap-3 mb-1">
+          <button
+            onClick={onBack}
+            aria-label="Voltar"
+            className="w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0"
+            style={{ background: '#F3F4F6' }}
+          >
+            <ChevronLeft size={20} style={{ color: '#1A1A1A' }} strokeWidth={2} />
+          </button>
           <h1 className="text-2xl font-black text-left" style={{ color: '#1A1A1A' }}>Sugerir local</h1>
         </div>
         <StepBar current={step} />
@@ -197,7 +226,20 @@ const CATEGORY_COLORS: Record<string, string> = {
   'Outro': '#6B7280',
 };
 
-// ── CategoryPickerSheet — modal centrado ─────────────────────────────────────
+// categoryMap — converte a selecção visual para o valor exacto do OpenAPI
+const CATEGORY_MAP: Record<string, string> = {
+  'Gastronomia':        'restaurant',
+  'Hotel':              'hotel',
+  'Praias':             'attraction',
+  'Natureza':           'attraction',
+  'Aventura':           'attraction',
+  'Mergulho':           'attraction',
+  'Ecoturismo':         'attraction',
+  'Cultura & História': 'attraction',
+  'Outro':              'attraction',
+};
+
+// ── CategoryPickerSheet — 8 categorias visuais ───────────────────────────────
 function CategoryPickerSheet({ value, onSelect, onClose }: {
   value: string; onSelect: (v: string) => void; onClose: () => void;
 }) {
@@ -222,9 +264,7 @@ function CategoryPickerSheet({ value, onSelect, onClose }: {
 
         {/* Header */}
         <div className="flex items-center justify-between px-5 pt-5 pb-4 flex-shrink-0">
-          <div>
-            <h3 className="text-base font-black" style={{ color: '#1A1A1A' }}>Categoria</h3>
-          </div>
+          <h3 className="text-base font-black" style={{ color: '#1A1A1A' }}>Categoria</h3>
           <button onClick={onClose}
             className="w-8 h-8 rounded-full flex items-center justify-center transition-all hover:bg-gray-100"
             style={{ background: '#F3F4F6' }}>
@@ -435,11 +475,151 @@ function PickerSheet({ title, options, value, onSelect, onClose }: {
   );
 }
 
+// ── AmenitiesSheet — multi-select de comodidades ─────────────────────────────
+function AmenitiesSheet({ value, onChange, onClose }: {
+  value: string[]; onChange: (v: string[]) => void; onClose: () => void;
+}) {
+  const toggle = (id: string) =>
+    onChange(value.includes(id) ? value.filter(x => x !== id) : [...value, id]);
+  return (
+    <motion.div
+      className="fixed z-50 flex items-center justify-center"
+      style={{ top: 0, bottom: 0, left: 'var(--sidebar-w, 0px)', right: 0 }}
+      initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+      <div className="absolute inset-0" style={{ background: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(4px)' }} onClick={onClose} />
+      <motion.div
+        className="relative flex flex-col"
+        style={{
+          width: 380, maxWidth: 'calc(100vw - 32px)', maxHeight: 'calc(80vh - 50px)',
+          background: 'white', borderRadius: 24,
+          boxShadow: '0 24px 64px rgba(0,0,0,0.18), 0 8px 24px rgba(0,0,0,0.1)',
+        }}
+        initial={{ opacity: 0, scale: 0.88, y: 16 }}
+        animate={{ opacity: 1, scale: 1, y: 0 }}
+        exit={{ opacity: 0, scale: 0.88, y: 16 }}
+        transition={{ duration: 0.2, ease: [0.34, 1.56, 0.64, 1] }}>
+        <div className="flex items-center justify-between px-5 pt-5 pb-4 flex-shrink-0">
+          <h3 className="text-base font-black" style={{ color: '#1A1A1A' }}>Comodidades</h3>
+          <button onClick={onClose} className="w-8 h-8 rounded-full flex items-center justify-center" style={{ background: '#F3F4F6' }}>
+            <X size={15} style={{ color: '#6B7280' }} />
+          </button>
+        </div>
+        <div className="mx-5 mb-3 h-px" style={{ background: '#F3F4F6' }} />
+        <div className="px-4 py-2 overflow-y-auto flex-1">
+          <div className="grid grid-cols-2 gap-2">
+            {AMENITIES_OPTIONS.map(opt => {
+              const active = value.includes(opt.id);
+              return (
+                <motion.button key={opt.id} whileTap={{ scale: 0.97 }} onClick={() => toggle(opt.id)}
+                  className="flex items-center gap-2 px-3 py-2.5 rounded-2xl border transition-all text-left"
+                  style={{
+                    background: active ? '#EEF7F0' : 'white',
+                    borderColor: active ? '#1B5E3B' : '#E5E7EB',
+                  }}>
+                  <div className="w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0 transition-all"
+                    style={{ background: active ? '#1B5E3B' : '#F3F4F6' }}>
+                    {active && <Check size={11} color="white" strokeWidth={3} />}
+                  </div>
+                  <span className="text-xs font-bold truncate" style={{ color: active ? '#1B5E3B' : '#374151' }}>
+                    {opt.label}
+                  </span>
+                </motion.button>
+              );
+            })}
+          </div>
+        </div>
+        <div className="px-4 pt-2 pb-5 flex-shrink-0">
+          <div className="h-px mb-4" style={{ background: '#F3F4F6' }} />
+          <motion.button whileTap={{ scale: 0.97 }} onClick={onClose}
+            className="w-full py-3.5 rounded-2xl text-white font-black text-sm flex items-center justify-center gap-2"
+            style={{ background: '#1B5E3B', boxShadow: '0 4px 16px rgba(27,94,59,0.3)' }}>
+            <Check size={16} strokeWidth={2.5} />
+            Confirmar {value.length > 0 && `(${value.length})`}
+          </motion.button>
+        </div>
+      </motion.div>
+    </motion.div>
+  );
+}
+
 // ── Main ──────────────────────────────────────────────────────────────────────
+// ── Modal de upgrade — role sem permissão ─────────────────────────────────────
+function UpgradeModal({ onClose, onSettings }: { onClose: () => void; onSettings: () => void }) {
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-end justify-center"
+      style={{ background: 'rgba(0,0,0,0.55)', backdropFilter: 'blur(4px)' }}
+      onClick={onClose}
+    >
+      <motion.div
+        initial={{ y: 80, opacity: 0 }}
+        animate={{ y: 0, opacity: 1 }}
+        exit={{ y: 80, opacity: 0 }}
+        transition={{ type: 'spring', stiffness: 320, damping: 30 }}
+        onClick={e => e.stopPropagation()}
+        className="w-full max-w-lg mx-2 mb-4 rounded-3xl p-6"
+        style={{ background: 'white', boxShadow: '0 20px 60px rgba(0,0,0,0.25)' }}
+      >
+        {/* Ícone */}
+        <div className="flex items-center gap-3 mb-4">
+          <div className="w-12 h-12 rounded-2xl flex items-center justify-center flex-shrink-0"
+            style={{ background: 'linear-gradient(135deg, #FEF3C7, #FDE68A)' }}>
+            <Lock size={22} style={{ color: '#D97706' }} />
+          </div>
+          <div>
+            <h3 className="font-black text-base" style={{ color: '#0F172A' }}>Upgrade necessário</h3>
+            <p className="text-xs" style={{ color: '#64748B' }}>Permissão de negócio local requerida</p>
+          </div>
+          <button onClick={onClose} className="ml-auto w-8 h-8 flex items-center justify-center rounded-full hover:bg-gray-100">
+            <X size={16} style={{ color: '#64748B' }} />
+          </button>
+        </div>
+
+        <p className="text-sm mb-4 leading-relaxed" style={{ color: '#475569' }}>
+          {UPGRADE_MESSAGE}
+        </p>
+
+        {/* Passos */}
+        <div className="rounded-2xl p-4 mb-4" style={{ background: '#F8FAFC', border: '1px solid #E2E8F0' }}>
+          <p className="text-xs font-semibold mb-2" style={{ color: '#374151' }}>Como fazer upgrade:</p>
+          <ol className="space-y-2">
+            {UPGRADE_STEPS.map((s, i) => (
+              <li key={i} className="flex items-start gap-2.5 text-xs" style={{ color: '#64748B' }}>
+                <span className="w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0 font-black text-[10px]"
+                  style={{ background: '#1B5E3B', color: 'white' }}>
+                  {i + 1}
+                </span>
+                {s}
+              </li>
+            ))}
+          </ol>
+        </div>
+
+        <div className="flex gap-3">
+          <button onClick={onClose}
+            className="flex-1 py-3 rounded-xl text-sm font-bold"
+            style={{ background: '#F1F5F9', color: '#64748B' }}>
+            Cancelar
+          </button>
+          <button onClick={onSettings}
+            className="flex-1 py-3 rounded-xl text-sm font-black text-white"
+            style={{ background: 'linear-gradient(135deg, #0F4C2A, #1B7A45)' }}>
+            Ir para definições
+          </button>
+        </div>
+      </motion.div>
+    </div>
+  );
+}
+
 export default function AddLocal({
   onSuccess, onBack }: AddLocalProps) {
   useScrollTop();
+  const { user } = useAuth();
   const [step, setStep] = useState(1);
+
+  // ── Upgrade modal — permissão de role ───────────────────────────────────────
+  const [showUpgradeModal, setShowUpgradeModal] = useState(false);
 
   // Step 1
   const [name, setName]       = useState('');
@@ -478,11 +658,22 @@ export default function AddLocal({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
+  // Campos de contacto — pré-preenchidos com dados do perfil (igual ao AddService)
+  const [phone, setPhone]         = useState(() => user?.phone    || '');
+  const [whatsapp, setWhatsapp]   = useState(() => user?.phone    || ''); // phone serve de whatsapp por defeito
+  const [email, setEmail]         = useState(() => user?.email    || '');
+  const [website, setWebsite]     = useState('');
+
+  // Informações adicionais (opcionais — Step 1)
+  const [priceRange, setPriceRange] = useState('');
+  const [amenities, setAmenities]   = useState<string[]>([]);
+
   // Sheets
   const [showCat, setShowCat]         = useState(false);
   const [showTipo, setShowTipo]       = useState(false);
   const [showEpoca, setShowEpoca]     = useState(false);
   const [showDest, setShowDest]       = useState(false);
+  const [showAmenities, setShowAmenities] = useState(false);
 
   const [submitted, setSubmitted] = useState(false);
 
@@ -490,6 +681,12 @@ export default function AddLocal({
     setDestaques(p => p.includes(id) ? p.filter(x => x !== id) : [...p, id]);
 
   const handleSubmit = async () => {
+    // ── Breaking Changes v2.1.0: verificar role antes de enviar ──────────────
+    if (!canCreateBusiness(user?.role, user?.type)) {
+      setShowUpgradeModal(true);
+      return;
+    }
+
     if (!name.trim()) {
       setStep1Error('O nome do lugar é obrigatório.');
       setStep(1);
@@ -528,25 +725,13 @@ export default function AddLocal({
     };
 
     try {
-      const categoryMap: Record<string, string> = {
-        'Gastronomia':        'restaurant',
-        'Hotel':              'hotel',
-        'Praias':             'attraction',
-        'Natureza':           'attraction',
-        'Aventura':           'attraction',
-        'Mergulho':           'attraction',
-        'Ecoturismo':         'attraction',
-        'Cultura & História': 'attraction',
-        'Outro':              'attraction',
-        'restaurant':         'restaurant',
-        'hotel':              'hotel',
-        'attraction':         'attraction',
-        'shop':               'shop',
-        'service':            'service',
-      };
-      const backendCategory = categoryMap[category] || 'attraction';
+      // Converter a categoria visual para o valor exacto do OpenAPI via CATEGORY_MAP
+      const backendCategory = CATEGORY_MAP[category] || 'attraction';
 
-      // Passo 1: Criar o local via JSON (sem imagens)
+      // O local é criado com TODOS os campos + imagens no mesmo POST multipart.
+      // É o único ponto em que o backend associa as imagens ao registo
+      // (POST /api/locals/ → images: File[]). Upload e associação em passos
+      // separados deixavam as fotos no Cloudinary mas sem vínculo ao local.
       const payload: Record<string, any> = {
         name:        name.trim(),
         description: desc.trim(),
@@ -570,12 +755,35 @@ export default function AddLocal({
       if (fullAddress)               payload.address              = fullAddress;
       if (lat.trim())                payload.latitude             = parseFloat(lat);
       if (lng.trim())                payload.longitude            = parseFloat(lng);
-      if (destaques.length)          payload.highlights           = destaques;
+      // highlights: enviar labels legíveis (não IDs internos) — array conforme OpenAPI
+      if (destaques.length)          payload.highlights           = destaques.map(id => destaquesOptions.find(o => o.id === id)?.label ?? id);
+      // campos de contacto
+      if (phone.trim())              payload.phone                = phone.trim();
+      if (whatsapp.trim())           payload.whatsapp             = whatsapp.trim();
+      if (email.trim())              payload.email                = email.trim();
+      if (website.trim())            payload.website              = website.trim();
+      // informações adicionais
+      if (priceRange)                payload.priceRange           = priceRange;
+      if (amenities.length)          payload.amenities            = amenities;
 
-      console.log('[AddLocal] Passo 1 — criar com JSON...');
-      const { data, error } = await localsApi.createJson(payload);
+      // Construir multipart: campos planos + ficheiros de imagem
+      const fd = new FormData();
+      Object.entries(payload).forEach(([key, value]) => {
+        if (value === undefined || value === null || value === '') return;
+        fd.append(key, typeof value === 'object' ? JSON.stringify(value) : String(value));
+      });
+      photoFiles.slice(0, 10).forEach(f => fd.append('images', f));
+
+      console.log('[AddLocal] Criar local com', photoFiles.length, 'imagem(ns)...');
+      const { data, error } = await localsApi.create(fd);
 
       if (error) {
+        // 403 com dados de upgrade — mostrar modal
+        const d403 = (data as any);
+        if (d403?.action_required || d403?.current_role) {
+          setShowUpgradeModal(true);
+          return;
+        }
         setStep1Error(extractErrorMsg(error));
         return;
       }
@@ -583,54 +791,8 @@ export default function AddLocal({
       const localId = data?.local?.id ?? data?.id;
       console.log('[AddLocal] ✅ Local criado (id:', localId, ')');
 
-      // Passo 2: upload de imagens via POST /api/upload/images/ (context=local)
-      // + PUT multipart para associar ao local — dupla estratégia para máxima compatibilidade
-      if (photoFiles.length > 0 && localId) {
-        console.log('[AddLocal] Passo 2 — upload de imagens...');
-
-        // 2a. Upload dedicado → guarda no cache para exibição imediata
-        const uploadedUrls = await uploadAndCache(photoFiles.slice(0, 10), localId, 'local');
-        console.log('[AddLocal] Upload dedicado:', uploadedUrls.length, 'URL(s) obtidas');
-
-        // 2b. PUT multipart para associar imagens ao local no backend
-        console.log('[AddLocal] Passo 2b — PUT multipart com imagens...');
-        const fd = new FormData();
-        // Campos administrativos completos
-        fd.append('name',        name.trim());
-        fd.append('description', desc.trim());
-        fd.append('category',    backendCategory);
-        if (tipo.trim())               fd.append('subcategory',         (tipoOptions.find(o => o.id === tipo)?.label ?? tipo).trim());
-        if (epoca.trim())              fd.append('best_season',         (() => { const e = epocaOptions.find(o => o.id === epoca); return e ? `${e.label} (${e.subtitle})` : epoca; })());
-        if (provincia.trim())          fd.append('province',            provincia.trim());
-        // municipality = Distrito (LocalWriteRequest do OpenAPI)
-        if (district.trim())           fd.append('municipality',        district.trim());
-        if (administrativePost.trim()) fd.append('administrative_post', administrativePost.trim());
-        if (cidade.trim())             fd.append('locality',            cidade.trim());
-        if (nearbyReference.trim())    fd.append('nearby_reference',    nearbyReference.trim());
-        const fullAddressMulti = buildFullAddress({ locality: cidade, administrativePost, district, province: provincia });
-        if (fullAddressMulti)          fd.append('address',             fullAddressMulti);
-        if (lat.trim())                fd.append('latitude',            lat.trim());
-        if (lng.trim())                fd.append('longitude',           lng.trim());
-        if (destaques.length)          fd.append('highlights',          JSON.stringify(destaques));
-        photoFiles.slice(0, 10).forEach(f => fd.append('images', f));
-
-        const { data: putData, error: putErr } = await localsApi.update(localId, fd);
-        if (putErr) {
-          console.warn('[AddLocal] ⚠️ PUT multipart falhou:', extractErrorMsg(putErr));
-          // Imagens do upload dedicado ainda estão no cache — continuar
-        } else {
-          console.log('[AddLocal] ✅ Imagens associadas via PUT');
-          // Guardar no cache as URLs que o backend devolveu na resposta do PUT
-          const putImages: string[] = Array.isArray(putData?.images)
-            ? putData.images.filter((u: any) => typeof u === 'string' && u.trim())
-            : [];
-          if (putImages.length > 0) {
-            cacheImages(localId, putImages);
-            console.log('[AddLocal] ✅ URLs do PUT guardadas no cache:', putImages);
-          }
-        }
-
-        // Passo 2c: GET ao local para obter imagens reais confirmadas pelo backend
+      // Confirmar no backend as URLs das imagens e guardá-las no cache local
+      if (localId && photoFiles.length > 0) {
         try {
           const { data: getData } = await localsApi.get(localId);
           const backendImages: string[] = Array.isArray(getData?.images)
@@ -639,9 +801,12 @@ export default function AddLocal({
           if (backendImages.length > 0) {
             cacheImages(localId, backendImages);
             console.log('[AddLocal] ✅ URLs confirmadas pelo GET guardadas no cache:', backendImages);
+          } else {
+            // Backend não devolveu imagens — garantir pré-visualização local
+            await uploadAndCache(photoFiles.slice(0, 10), localId, 'local');
           }
         } catch {
-          console.warn('[AddLocal] GET de confirmação falhou — cache mantém URLs do upload');
+          await uploadAndCache(photoFiles.slice(0, 10), localId, 'local');
         }
       }
 
@@ -677,8 +842,22 @@ export default function AddLocal({
   const next = () => setStep(s => Math.min(s + 1, 4));
   const prev = () => { if (step === 1) onBack(); else setStep(s => s - 1); };
 
+  // ── Modal de upgrade (overlay — visível em qualquer step) ──────────────────
+  const upgradeOverlay = (
+    <AnimatePresence>
+      {showUpgradeModal && (
+        <UpgradeModal
+          onClose={() => setShowUpgradeModal(false)}
+          onSettings={() => { setShowUpgradeModal(false); onBack(); }}
+        />
+      )}
+    </AnimatePresence>
+  );
+
   // ── STEP 1 ─────────────────────────────────────────────────────────────────
   if (step === 1) return (
+    <>
+    {upgradeOverlay}
     <div className="min-h-screen pb-24" style={{ background: '#F5F5F0', fontFamily: 'Nunito, sans-serif' }}>
       <PageHeader step={1} onBack={prev} />
       <div className="px-4 pt-4 space-y-4 text-left max-w-2xl mx-auto">
@@ -691,7 +870,7 @@ export default function AddLocal({
         </div>
 
         <div>
-          <label className="block text-sm font-black mb-1.5 text-left" style={{ color: '#1A1A1A' }}>Categoria</label>
+          <label className="block text-sm font-black mb-1.5 text-left" style={{ color: '#1A1A1A' }}>Categoria *</label>
           <button onClick={() => setShowCat(true)} className="w-full flex items-center justify-between px-4 py-3 rounded-2xl border bg-white text-sm"
             style={{ borderColor: category ? (CATEGORY_COLORS[category] || '#E5E7EB') : '#E5E7EB', color: category ? '#1A1A1A' : '#9CA3AF' }}>
             <div className="flex items-center gap-2">
@@ -779,13 +958,108 @@ export default function AddLocal({
         </div>
 
         <div>
-          <label className="block text-sm font-black mb-1.5 text-left" style={{ color: '#1A1A1A' }}>Descrição</label>
+          <label className="block text-sm font-black mb-1.5 text-left" style={{ color: '#1A1A1A' }}>Descrição *</label>
           <div className="relative">
             <textarea placeholder="O que torna este lugar único? Conte a sua história, curiosidades, dicas..." value={desc}
               onChange={e => setDesc(e.target.value.slice(0, 1000))} rows={4}
               className="w-full px-4 py-3.5 rounded-2xl border bg-white text-sm focus:outline-none resize-none"
               style={{ borderColor: '#E5E7EB', color: '#1A1A1A', fontFamily: 'Nunito, sans-serif' }} />
             <span className="absolute bottom-3 right-3 text-[10px]" style={{ color: '#C7C7CC' }}>{desc.length}/1000</span>
+          </div>
+        </div>
+
+        {/* ── Secção: Contactos (opcional) ───────────────────────────────── */}
+        <div className="bg-white rounded-2xl overflow-hidden border" style={{ borderColor: '#E5E7EB' }}>
+          <div className="px-4 py-3 border-b" style={{ borderColor: '#F3F4F6', background: '#FAFAFA' }}>
+            <p className="text-xs font-black uppercase tracking-wide" style={{ color: '#6B7280' }}>Contactos</p>
+          </div>
+          <div className="px-4 py-3 space-y-3">
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs font-bold mb-1" style={{ color: '#6B7280' }}>Telefone</label>
+                <input type="tel" placeholder="+258 84 000 0000" value={phone} onChange={e => setPhone(e.target.value)}
+                  className="w-full px-3 py-2.5 rounded-xl border bg-white text-sm focus:outline-none"
+                  style={{ borderColor: '#E5E7EB', color: '#1A1A1A', fontFamily: 'Nunito, sans-serif' }} />
+              </div>
+              <div>
+                <label className="block text-xs font-bold mb-1" style={{ color: '#6B7280' }}>WhatsApp</label>
+                <input type="tel" placeholder="+258 84 000 0000" value={whatsapp} onChange={e => setWhatsapp(e.target.value)}
+                  className="w-full px-3 py-2.5 rounded-xl border bg-white text-sm focus:outline-none"
+                  style={{ borderColor: '#E5E7EB', color: '#1A1A1A', fontFamily: 'Nunito, sans-serif' }} />
+              </div>
+            </div>
+            <div>
+              <label className="block text-xs font-bold mb-1" style={{ color: '#6B7280' }}>E-mail</label>
+              <input type="email" placeholder="contacto@exemplo.com" value={email} onChange={e => setEmail(e.target.value)}
+                className="w-full px-3 py-2.5 rounded-xl border bg-white text-sm focus:outline-none"
+                style={{ borderColor: '#E5E7EB', color: '#1A1A1A', fontFamily: 'Nunito, sans-serif' }} />
+            </div>
+            <div>
+              <label className="block text-xs font-bold mb-1" style={{ color: '#6B7280' }}>Website</label>
+              <input type="url" placeholder="https://www.exemplo.com" value={website} onChange={e => setWebsite(e.target.value)}
+                className="w-full px-3 py-2.5 rounded-xl border bg-white text-sm focus:outline-none"
+                style={{ borderColor: '#E5E7EB', color: '#1A1A1A', fontFamily: 'Nunito, sans-serif' }} />
+            </div>
+          </div>
+        </div>
+
+        {/* ── Secção: Informações Adicionais (opcional) ─────────────────── */}
+        <div className="bg-white rounded-2xl overflow-hidden border" style={{ borderColor: '#E5E7EB' }}>
+          <div className="px-4 py-3 border-b" style={{ borderColor: '#F3F4F6', background: '#FAFAFA' }}>
+            <p className="text-xs font-black uppercase tracking-wide" style={{ color: '#6B7280' }}>Informações adicionais</p>
+          </div>
+          <div className="px-4 py-3 space-y-3">
+            {/* Faixa de preço */}
+            <div>
+              <label className="block text-xs font-bold mb-2" style={{ color: '#6B7280' }}>Faixa de preço</label>
+              <div className="grid grid-cols-4 gap-2">
+                {PRICE_OPTIONS.map(opt => {
+                  const active = priceRange === opt.value;
+                  return (
+                    <motion.button key={opt.value} whileTap={{ scale: 0.95 }}
+                      onClick={() => setPriceRange(active ? '' : opt.value)}
+                      className="flex flex-col items-center py-2.5 px-1 rounded-xl border transition-all"
+                      style={{
+                        background: active ? '#EEF7F0' : 'white',
+                        borderColor: active ? '#1B5E3B' : '#E5E7EB',
+                      }}>
+                      <span className="text-sm font-black" style={{ color: active ? '#1B5E3B' : '#374151' }}>{opt.value}</span>
+                      <span className="text-[9px] font-semibold mt-0.5 text-center leading-tight" style={{ color: active ? '#4B7A5E' : '#9CA3AF' }}>{opt.label}</span>
+                    </motion.button>
+                  );
+                })}
+              </div>
+            </div>
+            {/* Comodidades */}
+            <div>
+              <label className="block text-xs font-bold mb-1" style={{ color: '#6B7280' }}>Características incluídas</label>
+              <button onClick={() => setShowAmenities(true)}
+                className="w-full flex items-center justify-between px-3 py-2.5 rounded-xl border bg-white text-sm"
+                style={{ borderColor: amenities.length ? '#1B5E3B' : '#E5E7EB', color: amenities.length ? '#1A1A1A' : '#9CA3AF' }}>
+                <span className="truncate flex-1 text-left text-sm">
+                  {amenities.length
+                    ? amenities.map(id => AMENITIES_OPTIONS.find(o => o.id === id)?.label ?? id).join(', ')
+                    : 'Selecionar comodidades...'}
+                </span>
+                <ChevronDown size={15} className="text-gray-400 flex-shrink-0 ml-2" />
+              </button>
+              {amenities.length > 0 && (
+                <div className="flex flex-wrap gap-1.5 mt-2">
+                  {amenities.map(id => {
+                    const opt = AMENITIES_OPTIONS.find(o => o.id === id);
+                    return opt ? (
+                      <span key={id} className="flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold"
+                        style={{ background: '#EEF7F0', color: '#1B5E3B' }}>
+                        {opt.label}
+                        <button onClick={() => setAmenities(p => p.filter(x => x !== id))} className="ml-0.5">
+                          <X size={10} />
+                        </button>
+                      </span>
+                    ) : null;
+                  })}
+                </div>
+              )}
+            </div>
           </div>
         </div>
 
@@ -820,10 +1094,10 @@ export default function AddLocal({
             </div>
             <div style={{ flex: 1 }}>
               <p style={{ margin: 0, fontSize: 13, fontWeight: 900, color: '#1B5E3B', marginBottom: 4 }}>
-                Quase la!
+                Quase lá!
               </p>
               <p style={{ margin: 0, fontSize: 12, fontWeight: 500, color: '#4B7A5E', lineHeight: 1.6 }}>
-                A tua sugestao sera analisada pela equipa <strong style={{ color: '#1B5E3B' }}>Txopela Tour</strong> antes de ser publicada. Juntos mostramos o melhor de Mocambique!
+                A tua sugestão de local será analisada pela equipa <strong style={{ color: '#1B5E3B' }}>Txopela Tour</strong> antes de ser publicada. Juntos mostramos o melhor de Moçambique!
               </p>
             </div>
           </div>
@@ -834,6 +1108,7 @@ export default function AddLocal({
         {showCat && <CategoryPickerSheet value={category} onSelect={setCategory} onClose={() => setShowCat(false)} />}
         {showTipo && <IconPickerSheet title="Tipo de lugar" options={tipoOptions} value={tipo} onSelect={setTipo} onClose={() => setShowTipo(false)} />}
         {showEpoca && <IconPickerSheet title="Melhor época para visitar" options={epocaOptions} value={epoca} onSelect={setEpoca} onClose={() => setShowEpoca(false)} />}
+        {showAmenities && <AmenitiesSheet value={amenities} onChange={setAmenities} onClose={() => setShowAmenities(false)} />}
         {showDest && (
           <motion.div
             className="fixed z-50 flex items-center justify-center"
@@ -912,10 +1187,13 @@ export default function AddLocal({
         )}
       </AnimatePresence>
     </div>
+    </>
   );
 
   // ── STEP 2 — Localização ───────────────────────────────────────────────────
   if (step === 2) return (
+    <>
+    {upgradeOverlay}
     <div className="min-h-screen pb-24" style={{ background: '#F5F5F0', fontFamily: 'Nunito, sans-serif' }}>
       <PageHeader step={2} onBack={prev} />
       <div className="px-4 pt-4 space-y-4 text-left max-w-2xl mx-auto">
@@ -980,10 +1258,13 @@ export default function AddLocal({
         )}
       </div>
     </div>
+    </>
   );
 
   // ── STEP 3 — Fotos ─────────────────────────────────────────────────────────
   if (step === 3) return (
+    <>
+    {upgradeOverlay}
     <div className="min-h-screen pb-24" style={{ background: '#F5F5F0', fontFamily: 'Nunito, sans-serif' }}>
       <PageHeader step={3} onBack={prev} />
       <div className="px-4 pt-4 space-y-4 text-left max-w-2xl mx-auto">
@@ -1072,6 +1353,7 @@ export default function AddLocal({
         </motion.button>
       </div>
     </div>
+    </>
   );
 
   // ── STEP 4 — Revisão ───────────────────────────────────────────────────────
@@ -1085,6 +1367,8 @@ export default function AddLocal({
   const provLabel = provincia || '—';
 
   return (
+    <>
+    {upgradeOverlay}
     <div className="min-h-screen pb-24" style={{ background: '#F5F5F0', fontFamily: 'Nunito, sans-serif' }}>
       <PageHeader step={4} onBack={prev} />
       <div className="px-4 pt-4 space-y-4 text-left max-w-2xl mx-auto">
@@ -1170,6 +1454,61 @@ export default function AddLocal({
           </div>
         )}
 
+        {/* Informações adicionais — só mostra se pelo menos um campo preenchido */}
+        {(priceRange || amenities.length > 0) && (
+          <div className="bg-white rounded-2xl overflow-hidden shadow-sm">
+            <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
+              <p className="text-sm font-black" style={{ color: '#1A1A1A' }}>Informações adicionais</p>
+              <button onClick={() => setStep(1)} className="text-xs font-bold" style={{ color: '#1B5E3B' }}>Editar</button>
+            </div>
+            {priceRange && (
+              <div className="flex items-center justify-between px-4 py-3 border-b border-gray-50">
+                <span className="text-xs font-semibold" style={{ color: '#9CA3AF' }}>Faixa de preço</span>
+                <span className="text-xs font-bold" style={{ color: '#1A1A1A' }}>
+                  {priceRange} · {PRICE_OPTIONS.find(o => o.value === priceRange)?.label}
+                </span>
+              </div>
+            )}
+            {amenities.length > 0 && (
+              <div className="px-4 py-3">
+                <span className="text-xs font-semibold block mb-2" style={{ color: '#9CA3AF' }}>Comodidades</span>
+                <div className="flex flex-wrap gap-1.5">
+                  {amenities.map(id => {
+                    const opt = AMENITIES_OPTIONS.find(o => o.id === id);
+                    return opt ? (
+                      <span key={id} className="px-2.5 py-1 rounded-full text-xs font-bold"
+                        style={{ background: '#EEF7F0', color: '#1B5E3B' }}>
+                        {opt.label}
+                      </span>
+                    ) : null;
+                  })}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Contactos — só mostra se pelo menos um campo preenchido */}
+        {(phone || whatsapp || email || website) && (
+          <div className="bg-white rounded-2xl overflow-hidden shadow-sm">
+            <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
+              <p className="text-sm font-black" style={{ color: '#1A1A1A' }}>Contactos</p>
+              <button onClick={() => setStep(1)} className="text-xs font-bold" style={{ color: '#1B5E3B' }}>Editar</button>
+            </div>
+            {[
+              { k: 'Telefone',  v: phone   },
+              { k: 'WhatsApp',  v: whatsapp },
+              { k: 'E-mail',    v: email   },
+              { k: 'Website',   v: website },
+            ].filter(item => item.v).map(item => (
+              <div key={item.k} className="flex items-center justify-between px-4 py-3 border-b border-gray-50 last:border-0">
+                <span className="text-xs font-semibold" style={{ color: '#9CA3AF' }}>{item.k}</span>
+                <span className="text-xs font-bold text-right max-w-[60%] truncate" style={{ color: '#1A1A1A' }}>{item.v}</span>
+              </div>
+            ))}
+          </div>
+        )}
+
         {/* Rating preview */}
         <div className="bg-white rounded-2xl p-4 shadow-sm">
           <p className="text-sm font-black mb-2" style={{ color: '#1A1A1A' }}>Avaliação inicial</p>
@@ -1189,11 +1528,11 @@ export default function AddLocal({
           disabled={isSubmitting}>
           {isSubmitting ? (
             <>
-              <Loader2 size={20} className="animate-spin" /> A enviar...
+              <Loader2 size={20} className="animate-spin" /> A sugerir...
             </>
           ) : (
             <>
-              <Check size={20} /> Enviar sugestão
+              <Check size={20} /> Sugerir local
             </>
           )}
         </motion.button>
@@ -1205,16 +1544,17 @@ export default function AddLocal({
             </div>
             <div style={{ flex: 1 }}>
               <p style={{ margin: 0, fontSize: 13, fontWeight: 900, color: '#1B5E3B', marginBottom: 4 }}>
-                Quase la!
+                Quase lá!
               </p>
               <p style={{ margin: 0, fontSize: 12, fontWeight: 500, color: '#4B7A5E', lineHeight: 1.6 }}>
-                A tua sugestao sera analisada pela equipa <strong style={{ color: '#1B5E3B' }}>Txopela Tour</strong> antes de ser publicada. Juntos mostramos o melhor de Mocambique!
+                A tua sugestão de local será analisada pela equipa <strong style={{ color: '#1B5E3B' }}>Txopela Tour</strong> antes de ser publicada. Juntos mostramos o melhor de Moçambique!
               </p>
             </div>
           </div>
         </div>
       </div>
     </div>
+    </>
   );
 }
 

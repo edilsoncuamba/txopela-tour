@@ -74,7 +74,10 @@ export function resolveImages(item: any): string[] {
   }
 
   const single = item.cover_image ?? item.coverImage ?? item.image ?? item.thumbnail;
-  if (typeof single === 'string' && single.trim() && !single.includes('/images/local-')) {
+  // Rejeitar apenas imagens estáticas locais da app (path relativo /images/*)
+  // Não usar includes() para evitar rejeitar URLs externas (Cloudinary, S3) que possam
+  // conter 'local-' no nome do ficheiro.
+  if (typeof single === 'string' && single.trim() && !single.startsWith('/images/local-')) {
     apiImages.push(single.trim());
   }
 

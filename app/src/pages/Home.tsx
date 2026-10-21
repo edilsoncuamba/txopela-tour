@@ -10,6 +10,7 @@ import {
 import DestinationDetail from '@/pages/DestinationDetail';
 import ProvinciaFeed from '@/pages/ProvinciaFeed';
 import ServiceDetail, { type ServiceData } from '@/pages/ServiceDetail';
+import PostDetail from '@/pages/PostDetail';
 import AllPosts from '@/pages/AllPosts';
 import AllDiscoveries from '@/pages/AllDiscoveries';
 import AllServices from '@/pages/AllServices';
@@ -20,6 +21,7 @@ import { mapValidLocal, mapValidService, mapValidPost, filterValidPublications }
 import { SERVICE_CATEGORY_COLOR, translateServiceCategory, itemMatchesFilter } from '@/utils/translations';
 import { useFavorites } from '@/context/FavoritesContext';
 import { useScrollTop } from '@/hooks/useScrollTop';
+import CommunityFeed from '@/components/CommunityFeed';
 
 interface HomeProps {
   onLocalPress: (local: Local) => void;
@@ -59,7 +61,6 @@ export default function Home({
   // Número de cards visíveis depende do estado da sidebar (desktop)
   const discoveriesLimit = sidebarCollapsed ? 5 : 4;
   const servicesLimit    = sidebarCollapsed ? 6 : 5;
-  const [suggested, setSuggested] = useState<Record<string, boolean>>({});
   const [selectedProvincia, setSelectedProvincia] = useState<string | null>(null);
   const [selectedDestination, setSelectedDestination] = useState<any>(null);
   const [selectedProvinciaFeed, setSelectedProvinciaFeed] = useState<string | null>(null);
@@ -69,6 +70,7 @@ export default function Home({
   const [showAllDiscoveries, setShowAllDiscoveries] = useState(false);
   const [showAllServices, setShowAllServices] = useState(false);
   const [showAllPosts, setShowAllPosts] = useState(false);
+  const [selectedPost, setSelectedPost] = useState<any | null>(null);
   
   // Estados da API — inicializados com cache para evitar flash de loading
   const [apiPosts, setApiPosts] = useState<any[]>(_cache.posts);
@@ -101,7 +103,7 @@ export default function Home({
           const { data, error } = await localsApi.nearby({ latitude, longitude, radius: 50, limit: 10 });
           if (error || !data) { setNearbyLocals([]); setNearbyError(null); }
           else {
-            const items: any[] = data.results ?? data.locals ?? (Array.isArray(data) ? data : []);
+            const items: any[] = data.results ?? data.locals ?? data.posts ?? (Array.isArray(data) ? data : []);
             const mapped = items.map(mapValidLocal).filter(Boolean);
             setNearbyLocals(mapped);
           }
@@ -116,26 +118,58 @@ export default function Home({
     );
   };
 
-  // Carregar posts da API
+  // Carregar posts da API — GET /api/posts/
+  // O backend filtra status='approved' — apenas posts aprovados aparecem no feed.
+  // Posts são publicados imediatamente sem moderação (sem fluxo de aprovação para publicações gerais).
   useEffect(() => {
-    const fetchPosts = async () => {
+    let isMounted = true;
+    const fetchPosts = async (retryCount = 0) => {
+      const MAX_RETRIES = 2;
+      const RETRY_DELAY = 3000;
       try {
-        setIsLoadingPosts(true);
-        const { data } = await postsApi.list({ page: 1, limit: 10, sortBy: 'recent' });
-        if (data) {
-          const posts = data.posts ?? data.results ?? (Array.isArray(data) ? data : []);
-          // Filtrar e validar apenas posts com dados reais e imagens
-          const validPosts = filterValidPublications(posts);
-          _cache.posts = validPosts.slice(0, 10);
+        if (retryCount === 0) setIsLoadingPosts(true);
+        const { data, error } = await postsApi.list({ page: 1, limit: 10, sortBy: 'recent' });
+
+        // Retry em 503/servidor indisponível
+        if (error && (error.includes('503') || error.includes('Erro interno do servidor')) && retryCount < MAX_RETRIES) {
+          if (isMounted) setTimeout(() => { if (isMounted) fetchPosts(retryCount + 1); }, RETRY_DELAY);
+          return;
+        }
+
+        if (data && isMounted) {
+          // Resposta real: envelope { status, code, data: { posts: [...] }, meta }
+          // apiFetch desempacota 1 nível → data = { posts: [...] }
+          // Array.isArray(data) é false; acedemos a data?.posts.
+          const rawPosts = Array.isArray(data) ? data : (data?.posts ?? data?.results ?? []);
+          const validPosts = filterValidPublications(rawPosts);
+          // Deduplicar por ID — previne duplicados se a API devolver itens repetidos
+          const seen = new Set<string>();
+          const dedupedPosts = validPosts.filter((p: any) => {
+            const id = String(p?.id ?? '');
+            if (!id || seen.has(id)) return false;
+            seen.add(id);
+            return true;
+          });
+          _cache.posts = dedupedPosts.slice(0, 10);
           setApiPosts(_cache.posts);
+        } else if (isMounted && !data) {
+          // Erro ou resposta vazia — mostra estado vazio sem apagar cache anterior
+          setApiPosts([]);
+          _cache.posts = [];
         }
       } catch (err) {
-        console.error('Failed to fetch posts:', err);
+        console.error('[HOME] Erro ao carregar posts:', err);
+        if (retryCount < MAX_RETRIES && isMounted) {
+          setTimeout(() => { if (isMounted) fetchPosts(retryCount + 1); }, RETRY_DELAY);
+          return;
+        }
+        if (isMounted) { setApiPosts([]); _cache.posts = []; }
       } finally {
-        setIsLoadingPosts(false);
+        if (isMounted) setIsLoadingPosts(false);
       }
     };
     fetchPosts();
+    return () => { isMounted = false; };
   }, [refreshKey]);
 
   // Carregar locais da API — GET /api/locals/ (backend filtra approved hardcoded)
@@ -180,8 +214,9 @@ export default function Home({
         }
         
         if (data) {
-          // Backend filtra status='approved' hardcoded — feed só mostra aprovados
-          const places: any[] = data.locals ?? data.results ?? (Array.isArray(data) ? data : []);
+          // OpenAPI: GET /api/locals/ → data = array direto de LocalList
+          // Fallback para { locals: [...] } por compatibilidade
+          const places: any[] = Array.isArray(data) ? data : (data?.locals ?? data?.results ?? []);
           console.log('[HOME] ✅ Locais recebidos da API:', places.length, 'locais');
           
           // Filtrar e validar apenas locais com dados reais e imagens
@@ -244,7 +279,8 @@ export default function Home({
         
         if (data) {
           // Backend filtra status='approved' hardcoded — feed só mostra aprovados
-          const services: any[] = data.services ?? data.results ?? (Array.isArray(data) ? data : []);
+          // OpenAPI: GET /api/services/ → data pode ser array direto OU { posts: [...] } (mesmo envelope dos posts)
+          const services: any[] = Array.isArray(data) ? data : (data?.posts ?? data?.services ?? data?.results ?? []);
           // Filtrar e validar apenas serviços com dados reais e imagens
           const validServices = filterValidPublications(services);
           _cache.services = validServices;
@@ -344,7 +380,7 @@ export default function Home({
 
   // Show service detail - data already correctly mapped
   if (selectedService) {
-    return <ServiceDetail service={selectedService} onBack={() => setSelectedService(null)} />;
+    return <ServiceDetail service={selectedService} onBack={() => setSelectedService(null)} onAuthorPress={onAuthorPress} />;
   }
 
   // Show all discoveries
@@ -397,6 +433,57 @@ export default function Home({
     return <AllPosts onBack={() => setShowAllPosts(false)} onAuthorPress={onAuthorPress} onEditPost={onEditPost} />;
   }
 
+  // Show post detail — quando o utilizador clica num card de post no feed do Home
+  if (selectedPost) {
+    const raw = selectedPost;
+    return (
+      <PostDetail
+        post={{
+          id:             raw.id,
+          author: {
+            id:     raw.author?.id     || '',
+            name:   raw.author?.name   || 'Utilizador',
+            avatar: raw.author?.avatar,
+            type:   raw.author?.type   || 'traveler',
+          },
+          title:          raw.title    || '',
+          category:       raw.category || '',
+          tags:           Array.isArray(raw.tags) ? raw.tags : [],
+          description:    raw.description || '',
+          image:          raw.image,
+          images:         raw.images,
+          likes_count:    raw.likes_count    ?? 0,
+          comments_count: raw.comments_count ?? 0,
+          shares_count:   raw.shares_count   ?? 0,
+          saves_count:    raw.saves_count    ?? 0,
+          is_liked:       raw.is_liked       ?? false,
+          is_saved:       raw.is_saved       ?? false,
+          created_at:     raw.created_at     ?? '',
+          province:       raw.province  || '',
+          district:       raw.district  || '',
+          city:           raw.city      || '',
+          address:        raw.address   || '',
+          local_address:  raw.local_address  || raw.address || '',
+          local_lat:      raw.local_lat,
+          local_lng:      raw.local_lng,
+          location:       raw.location,
+        }}
+        onBack={() => setSelectedPost(null)}
+        onLike={() => {}}
+        onSave={() => {}}
+        onShare={() => {
+          const text = raw.description || '';
+          if (navigator.share) navigator.share({ title: 'Txopela Tour', text, url: window.location.origin });
+          else navigator.clipboard?.writeText(`${text}\n${window.location.origin}`);
+        }}
+        onAuthorPress={(a) => {
+          setSelectedPost(null);
+          onAuthorPress?.({ id: a.id, name: a.name, avatar: a.avatar, type: a.type || 'traveler' });
+        }}
+      />
+    );
+  }
+
   // Show provincia feed
   if (selectedProvinciaFeed) {
     return (
@@ -424,18 +511,19 @@ export default function Home({
           }}
           onBack={() => setSelectedDestination(null)}
           onExploreMore={() => setSelectedDestination(null)}
+          onAuthorPress={onAuthorPress}
         />
       </AnimatePresence>
     );
   }
 
   return (
-    <div className="min-h-screen pb-20 md:pb-0" style={{ background: isDark ? '#0F1117' : '#F5F5F0', fontFamily: 'Nunito, sans-serif' }}>
+    <div className="min-h-screen pb-24 md:pb-0 overflow-x-hidden" style={{ background: isDark ? '#0F1117' : '#F5F5F0', fontFamily: 'Nunito, sans-serif' }}>
 
       {/* ── HERO ──────────────────────────────────────────────────────────── */}
       <div className="relative">
-        {/* Hero image — compacta */}
-        <div className="relative overflow-hidden" style={{ height: 66 }}>
+        {/* Hero image — altura responsiva */}
+        <div className="relative overflow-hidden" style={{ height: 'clamp(68px, 14vw, 96px)' }}>
           <img
             src="/images/splash-bg.jpg"
             alt="Inhambane"
@@ -444,7 +532,7 @@ export default function Home({
           <div className="absolute inset-0" style={{ background: 'linear-gradient(to bottom, rgba(0,80,160,0.65) 0%, rgba(0,80,160,0.25) 60%, rgba(0,0,0,0.05) 100%)' }} />
 
           {/* Título à esquerda */}
-          <div className="absolute inset-0 flex items-center px-5">
+          <div className="absolute inset-0 flex items-center px-5" style={{ paddingTop: 8, paddingBottom: 24 }}>
             <h1
               className="text-xl text-white leading-none"
               style={{ fontFamily: 'Pacifico, cursive', textShadow: '0 2px 8px rgba(0,0,0,0.3)' }}
@@ -454,18 +542,18 @@ export default function Home({
           </div>
         </div>
 
-        {/* Search bar — overlapping hero bottom */}
-        <div className="absolute left-4 right-4" style={{ bottom: -45 }}>
+        {/* Search bar — posição relativa para evitar valores absolutos frágeis */}
+        <div className="px-4 -mt-5 relative z-10">
           <form onSubmit={e => { e.preventDefault(); if (searchQuery.trim()) { onChat(searchQuery); setSearchQuery(''); } }}
             className="flex items-center rounded-2xl shadow-lg px-4 py-3 gap-2"
             style={{ background: isDark ? '#1A1D27' : '#ffffff', border: isDark ? '1px solid rgba(255,255,255,0.08)' : 'none' }}>
             <IconSearch size={17} className="text-gray-400 flex-shrink-0" />
             <input
               type="text"
-              placeholder="Que tipo de experiência procuras hoje?"
+              placeholder="Que experiência procuras?"
               value={searchQuery}
               onChange={e => setSearchQuery(e.target.value)}
-              className="flex-1 text-sm text-gray-500 placeholder:text-gray-400 bg-transparent focus:outline-none"
+              className="flex-1 text-sm text-gray-500 placeholder:text-gray-400 bg-transparent focus:outline-none min-w-0"
               style={{ fontFamily: 'Nunito, sans-serif' }}
             />
             {searchQuery.trim() ? (
@@ -502,8 +590,8 @@ export default function Home({
         </div>
       </div>
 
-      {/* Spacer for search overlap */}
-      <div style={{ height: 41 }} />
+      {/* Spacer compacto */}
+      <div style={{ height: 8 }} />
 
 
       {/* ── DESCOBERTAS ───────────────────────────────────────────────────── */}
@@ -516,7 +604,7 @@ export default function Home({
               <path d="M12 2l2.4 7.4H22l-6.2 4.5 2.4 7.4L12 17l-6.2 4.3 2.4-7.4L2 9.4h7.6z"/>
             </svg>
             <div>
-              <span className="text-base font-extrabold" style={{ color: isDark ? '#F0F4FF' : '#111827' }}>Descobertas para ti hoje</span>
+              <span className="text-base font-extrabold" style={{ color: isDark ? '#F0F4FF' : '#111827' }}>Locais por descobrir</span>
             </div>
           </div>
           <button className="flex items-center gap-0.5 text-sm font-semibold"
@@ -556,9 +644,12 @@ export default function Home({
                 whileTap={{ scale: 0.97 }}
                 onClick={() => setSelectedDestination(item)}
                 className="flex-shrink-0 rounded-2xl overflow-hidden relative cursor-pointer"
-                style={{ width: 200, height: 270 }}
+                style={{ width: 'clamp(160px, 44vw, 220px)', height: 'clamp(230px, 60vw, 290px)' }}
               >
-                <img src={item.image} alt={item.name} className="absolute inset-0 w-full h-full object-cover" />
+                {item.image
+                  ? <img src={item.image} alt={item.name} className="absolute inset-0 w-full h-full object-cover"
+                      onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+                  : null}
                 {/* Dark gradient bottom */}
                 <div className="absolute inset-0" style={{ background: 'linear-gradient(to top, rgba(0,0,0,0.82) 0%, rgba(0,0,0,0.30) 55%, transparent 100%)' }} />
 
@@ -657,45 +748,15 @@ export default function Home({
           )}
         </div>
         
-        {/* Grid 2 linhas x 5 colunas */}
-        <div className="px-4 space-y-3">
-          {/* Primeira linha - 5 províncias */}
-          <div className="grid grid-cols-5 gap-2">
+        {/* Grid províncias — 2 colunas mobile, 5 colunas tablet/desktop (2 linhas de 5) */}
+        <div className="px-4">
+          <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
             {[
               { name: 'Maputo',       image: '/images/provincias_profile/maputo_cidade.jpg' },
               { name: 'Gaza',         image: '/images/provincias_profile/maputo_provicnia.jpeg' },
               { name: 'Inhambane',    image: '/images/provincias_profile/inhambane.jpeg' },
               { name: 'Sofala',       image: '/images/provincias_profile/sofala.jpeg' },
               { name: 'Manica',       image: '/images/provincias_profile/manica.jpg' },
-            ].map((prov, i) => {
-              const isActive = selectedProvincia === prov.name;
-              return (
-                <motion.button
-                  key={prov.name}
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: i * 0.05 }}
-                  whileTap={{ scale: 0.95 }}
-                  onClick={() => setSelectedProvinciaFeed(prov.name)}
-                  className="relative rounded-2xl overflow-hidden shadow-sm"
-                  style={{ height: 80, outline: isActive ? `3px solid #1B5E3B` : 'none', outlineOffset: 2 }}
-                >
-                  <img src={prov.image} alt={prov.name} className="w-full h-full object-cover" />
-                  <div className="absolute inset-0" style={{ background: isActive ? 'rgba(27,94,59,0.45)' : 'linear-gradient(to top, rgba(0,0,0,0.65) 0%, transparent 55%)' }} />
-                  <span className="absolute bottom-2 left-2 text-white text-xs font-black">{prov.name}</span>
-                  {isActive && (
-                    <div className="absolute top-2 right-2 w-5 h-5 rounded-full bg-white flex items-center justify-center">
-                      <IconStar size={10} color="#1B5E3B" strokeWidth={2.5} />
-                    </div>
-                  )}
-                </motion.button>
-              );
-            })}
-          </div>
-
-          {/* Segunda linha - 5 províncias */}
-          <div className="grid grid-cols-5 gap-2">
-            {[
               { name: 'Tete',         image: '/images/provincias_profile/tete.jpg' },
               { name: 'Zambézia',     image: '/images/provincias_profile/zambezia.jpeg' },
               { name: 'Nampula',      image: '/images/provincias_profile/nampula.jpeg' },
@@ -708,18 +769,30 @@ export default function Home({
                   key={prov.name}
                   initial={{ opacity: 0, y: 10 }}
                   animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: (i + 5) * 0.05 }}
+                  transition={{ delay: i * 0.04 }}
                   whileTap={{ scale: 0.95 }}
                   onClick={() => setSelectedProvinciaFeed(prov.name)}
-                  className="relative rounded-2xl overflow-hidden shadow-sm"
-                  style={{ height: 80, outline: isActive ? `3px solid #1B5E3B` : 'none', outlineOffset: 2 }}
+                  className="relative rounded-2xl overflow-hidden shadow-sm w-full"
+                  style={{
+                    /* Em mobile: aspectRatio controla a altura proporcionalmente.
+                       Em desktop (sm+): maxHeight fixa garante que os cards não
+                       fiquem mais altos quando a sidebar colapsa e o main fica mais largo. */
+                    aspectRatio: '64 / 27',
+                    maxHeight: 120,
+                    outline: isActive ? `3px solid #1B5E3B` : 'none',
+                    outlineOffset: 2,
+                  }}
                 >
-                  <img src={prov.image} alt={prov.name} className="w-full h-full object-cover" />
+                  {prov.image
+                    ? <img src={prov.image} alt={prov.name} className="absolute inset-0 w-full h-full object-cover" loading="lazy"
+                        onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+                    : null}
                   <div className="absolute inset-0" style={{ background: isActive ? 'rgba(27,94,59,0.45)' : 'linear-gradient(to top, rgba(0,0,0,0.65) 0%, transparent 55%)' }} />
-                  <span className="absolute bottom-2 left-2 text-white text-xs font-black">{prov.name}</span>
+                  {/* Nome no canto inferior esquerdo — igual à imagem de referência */}
+                  <span className="absolute bottom-2 left-2 text-white text-xs font-black leading-tight drop-shadow-sm">{prov.name}</span>
                   {isActive && (
-                    <div className="absolute top-2 right-2 w-5 h-5 rounded-full bg-white flex items-center justify-center">
-                      <IconStar size={10} color="#1B5E3B" strokeWidth={2.5} />
+                    <div className="absolute top-1.5 right-1.5 w-4 h-4 rounded-full bg-white flex items-center justify-center">
+                      <IconStar size={8} color="#1B5E3B" strokeWidth={2.5} />
                     </div>
                   )}
                 </motion.button>
@@ -853,9 +926,12 @@ export default function Home({
                     contributor: svc.contributor,
                   })}
                   className="flex-shrink-0 rounded-2xl overflow-hidden relative cursor-pointer"
-                  style={{ width: 200, height: 270 }}
+                  style={{ width: 'clamp(160px, 44vw, 220px)', height: 'clamp(230px, 60vw, 290px)' }}
                 >
-                  <img src={svc.image} alt={svc.name} className="absolute inset-0 w-full h-full object-cover" />
+                  {svc.image
+                    ? <img src={svc.image} alt={svc.name} className="absolute inset-0 w-full h-full object-cover"
+                        onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+                    : null}
                   {/* Dark gradient bottom */}
                   <div className="absolute inset-0" style={{ background: 'linear-gradient(to top, rgba(0,0,0,0.82) 0%, rgba(0,0,0,0.30) 55%, transparent 100%)' }} />
 
@@ -916,6 +992,43 @@ export default function Home({
         )}
       </div>
 
+      {/* ── PUBLICAÇÕES DA COMUNIDADE — feed redesenhado com layout duas colunas ── */}
+      <CommunityFeed
+        isLoading={isLoadingPosts}
+        posts={posts.map(p => ({
+          id:             p.id,
+          author: {
+            id:     p.author?.id     ?? '',
+            name:   p.author?.name   ?? 'Utilizador',
+            avatar: p.author?.avatar,
+            type:   (p.author as any)?.type ?? (p.author as any)?.role ?? 'traveler',
+            role:   (p.author as any)?.role,
+          },
+          title:          p.title          ?? '',
+          description:    p.description    ?? '',
+          image:          p.image,
+          images:         p.images,
+          badge:          p.badge          ?? '',
+          badgeKey:       p.badgeKey       ?? 'other',
+          likes_count:    p.likes_count    ?? 0,
+          comments_count: p.comments_count ?? 0,
+          shares_count:   p.shares_count   ?? 0,
+          saves_count:    p.saves_count    ?? 0,
+          is_liked:       p.is_liked       ?? false,
+          is_saved:       p.is_saved       ?? false,
+          created_at:     p.created_at     ?? '',
+          province:       p.province       ?? '',
+          district:       p.district       ?? '',
+          city:           p.city           ?? '',
+          tags:           Array.isArray(p.tags) ? p.tags : [],
+        }))}
+        onOpenPost={(feedPost) => {
+          const raw = posts.find(p => p.id === feedPost.id) ?? feedPost;
+          setSelectedPost(raw);
+        }}
+        onAuthorPress={onAuthorPress}
+        onShowAll={() => setShowAllPosts(true)}
+      />
 
     </div>
   );

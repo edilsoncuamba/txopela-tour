@@ -8,6 +8,8 @@ import { useScrollTop } from '@/hooks/useScrollTop';
 interface SmartSearchProps {
   onLocalPress: (local: Local) => void;
   onBack: () => void;
+  /** Abre o perfil público de um utilizador ou autor de publicação */
+  onAuthorPress?: (author: { id: string; name: string; avatar?: string; type: string }) => void;
 }
 
 interface SearchResult {
@@ -19,8 +21,21 @@ interface SearchResult {
   data: any;
 }
 
+// Labels de tipo de utilizador (alinhados com UserRoleEnum do openapi-schema-1)
+const ROLE_LABEL: Record<string, string> = {
+  tourist:        'Viajante',
+  local_resident: 'Morador Local',
+  local_business: 'Negócio',
+  curator:        'Curador',
+  admin:          'Admin',
+  // valores mapeados pelo frontend
+  traveler:       'Viajante',
+  resident:       'Morador Local',
+  business:       'Negócio',
+};
+
 export default function SmartSearch({
-  onLocalPress, onBack }: SmartSearchProps) {
+  onLocalPress, onBack, onAuthorPress }: SmartSearchProps) {
   useScrollTop();
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<SearchResult[]>([]);
@@ -45,8 +60,8 @@ export default function SmartSearch({
       const { data: localsData } = await localsApi.list({
         search: searchQuery,
       });
-      // Documentação 3.1: A API devolve { success: true, locals: [...] }
-      const locations = localsData?.locals || [];
+      // OpenAPI: GET /api/locals/ → data = array direto de LocalList
+      const locations = Array.isArray(localsData) ? localsData : (localsData?.locals ?? localsData?.results ?? []);
       if (locations.length > 0) {
         locations.slice(0, 3).forEach((loc: any) => {
           searchResults.push({
@@ -69,20 +84,22 @@ export default function SmartSearch({
           )
           .slice(0, 3)
           .forEach((user: any) => {
+            const rawRole: string = user.role ?? user.type ?? 'tourist';
             searchResults.push({
               type: 'user',
               id: user.id,
               title: user.name,
-              subtitle: user.type,
+              subtitle: ROLE_LABEL[rawRole] ?? rawRole,
               icon: <User size={16} className="text-green-500" />,
-              data: user,
+              data: { ...user, role: rawRole },
             });
           });
       }
 
       // Search posts
       const { data: postsData } = await postsApi.list({ search: searchQuery, limit: 10 });
-      const postsItems = postsData?.posts ?? postsData?.results ?? (Array.isArray(postsData) ? postsData : []);
+      // OpenAPI: GET /api/posts/ → data = array direto de PostList
+      const postsItems = Array.isArray(postsData) ? postsData : (postsData?.posts ?? postsData?.results ?? []);
       postsItems
         .slice(0, 3)
         .forEach((post: any) => {
@@ -95,7 +112,6 @@ export default function SmartSearch({
             data: post,
           });
         });
-
       setResults(searchResults);
     } catch (err) {
       console.error('Search failed:', err);
@@ -129,6 +145,22 @@ export default function SmartSearch({
   const handleResultClick = (result: SearchResult) => {
     if (result.type === 'location') {
       onLocalPress(result.data);
+    } else if (result.type === 'user' && onAuthorPress) {
+      // Navegar para perfil público do utilizador
+      onAuthorPress({
+        id:     result.data.id,
+        name:   result.data.name,
+        avatar: result.data.avatar ?? undefined,
+        type:   result.data.role ?? result.data.type ?? 'tourist',
+      });
+    } else if (result.type === 'post' && result.data.author?.id && onAuthorPress) {
+      // Clicar num post abre o perfil do respectivo autor
+      onAuthorPress({
+        id:     result.data.author.id,
+        name:   result.data.author.name || 'Utilizador',
+        avatar: result.data.author.avatar ?? undefined,
+        type:   result.data.author.role ?? result.data.author.type ?? 'tourist',
+      });
     }
   };
 

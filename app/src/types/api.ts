@@ -429,3 +429,49 @@ export interface AvatarUploadResponse {
   success: boolean;
   avatarUrl: string;
 }
+
+// ── Email Verification ────────────────────────────────────────────────────────
+// POST /api/auth/verify-email/   body: { token }
+export interface VerifyEmailRequest {
+  token: string;            // token recebido por link de e-mail
+}
+
+// Resposta EmailVerificationResponse (OpenAPI)
+export interface EmailVerificationResponse {
+  success: boolean;
+  message: string;
+  email_verified: boolean;
+}
+
+// POST /api/auth/resend-verification/  body: { email }
+export interface ResendVerificationRequest {
+  email: string;
+}
+
+export interface ResendVerificationResponse {
+  success: boolean;
+  message: string;
+}
+
+// ── Password Recovery ─────────────────────────────────────────────────────────
+// POST /api/auth/request-password-reset/  body: { email }
+export interface RequestPasswordResetRequest {
+  email: string;
+}
+
+export interface RequestPasswordResetResponse {
+  success: boolean;
+  message: string;
+}
+
+// POST /api/auth/reset-password/  body: { token, password, password_confirm }
+export interface PasswordResetRequest {
+  token: string;            // token recebido por link de e-mail
+  password: string;         // min. 8 caracteres
+  password_confirm: string;
+}
+
+export interface PasswordResetResponse {
+  success: boolean;
+  message: string;
+}

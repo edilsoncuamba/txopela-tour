@@ -1,12 +1,14 @@
 import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { ChevronLeft, Search, X, MoreVertical, Edit2, Trash2 } from 'lucide-react';
-import { IconStar, IconHeart, IconMapPin } from '@/components/icons';
+import { useSuggest } from '@/hooks/useSuggest';
+import { IconStar, IconThumbsUp, IconMapPin } from '@/components/icons';
 import { Heart } from 'lucide-react';
 import PostDetail from '@/pages/PostDetail';
 import { postsApi } from '@/services/api';
 import { useAuth } from '@/context/AuthContext';
 import { useFavorites } from '@/context/FavoritesContext';
+import { usePosts } from '@/context/PostsContext';
 import { mapValidPost, filterValidPublications, extractImages, PLACEHOLDER_IMAGE } from '@/utils/dataValidation';
 import { translatePostCategory, postCategoryColor } from '@/utils/translations';
 import { useScrollTop } from '@/hooks/useScrollTop';
@@ -18,7 +20,7 @@ interface AllPostsProps {
   onEditPost?: (postId: string) => void;
 }
 
-const provincias = ['Todas', 'Maputo', 'Gaza', 'Inhambane', 'Sofala', 'Manica', 'Tete', 'Zamb�zia', 'Nampula', 'Cabo Delgado', 'Niassa'];
+const provincias = ['Todas', 'Maputo', 'Gaza', 'Inhambane', 'Sofala', 'Manica', 'Tete', 'Zambézia', 'Nampula', 'Cabo Delgado', 'Niassa'];
 
 type ApiPost = {
   id: string;
@@ -51,11 +53,49 @@ type ApiPost = {
   userInteraction?: { hasLiked: boolean; hasSaved: boolean };
 };
 
+// ── SuggestButton — usa hook useSuggest (POST/DELETE /api/users/{id}/follow/) ──
+// Cada card tem a sua própria instância do hook para estado isolado.
+function SuggestButton({
+  authorId,
+  initialIsFollowing = false,
+  currentUserId,
+  textColor,
+}: {
+  authorId: string | undefined | null;
+  initialIsFollowing?: boolean;
+  currentUserId?: string | null;
+  textColor: string;
+}) {
+  const { isSuggested, isLoading, isSelf, toggle, errorMessage } = useSuggest(authorId, initialIsFollowing, currentUserId);
+  // Não mostrar o botão ao próprio autor
+  if (isSelf) return null;
+  return (
+    <button
+      onClick={e => { e.stopPropagation(); toggle(); }}
+      disabled={isLoading}
+      className="flex items-center gap-1"
+      title={errorMessage ?? undefined}
+      aria-label={isSuggested ? 'Sugerido' : 'Sugerir perfil do autor'}
+    >
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
+        stroke={isSuggested ? '#1B5E3B' : textColor} strokeWidth="2.2"
+        strokeLinecap="round" strokeLinejoin="round"
+        style={{ opacity: isLoading ? 0.5 : 1 }}>
+        <path d="M22 2L11 13" /><path d="M22 2L15 22 11 13 2 9l20-7z" />
+      </svg>
+      <span className="text-xs" style={{ color: isSuggested ? '#1B5E3B' : textColor }}>
+        {isLoading ? 'Sugerindo…' : isSuggested ? 'Sugerido' : 'Sugerir'}
+      </span>
+    </button>
+  );
+}
+
 export default function AllPosts({
   onBack, onAuthorPress, onEditPost }: AllPostsProps) {
   useScrollTop();
   const { user } = useAuth();
   const { isFavorite, toggleFavorite } = useFavorites();
+  const { getLike, toggleLike, hydrateLike, isToggling } = usePosts();
   const { isDark } = useTheme();
   const dm = {
     bg:      isDark ? '#0F1117' : '#F5F5F0',
@@ -73,8 +113,6 @@ export default function AllPosts({
   const [posts, setPosts]         = useState<ApiPost[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError]         = useState<string | null>(null);
-  const [liked, setLiked]         = useState<Record<string, boolean>>({});
-  const [suggested, setSuggested] = useState<Record<string, boolean>>({});
   const [search, setSearch]       = useState('');
   const [filter, setFilter]       = useState('Todas');
   const [selectedPost, setSelectedPost] = useState<ApiPost | null>(null);
@@ -98,7 +136,9 @@ export default function AllPosts({
       if (apiError) {
         setError(apiError);
       } else if (data) {
-        const items: ApiPost[] = data.posts ?? data.results ?? (Array.isArray(data) ? data : []);
+        // O backend filtra status='approved' — só posts aprovados chegam aqui.
+        // Publicações gerais são sempre aprovadas imediatamente à criação.
+        const items: ApiPost[] = Array.isArray(data) ? data : (data?.posts ?? data?.results ?? []);
 
         // VALIDA��O RIGOROSA: Filtrar apenas posts com imagens reais
         const validPosts = filterValidPublications(items);
@@ -106,12 +146,11 @@ export default function AllPosts({
           .map(p => mapValidPost(p))
           .filter((p): p is ApiPost => p !== null);
 
-        // Inicializa estado de liked a partir dos dados da API
-        const likedState: Record<string, boolean> = {};
+        // Hidratar o estado de like partilhado (PostsContext) a partir da API.
+        // A API é a fonte de verdade — getLike(id) alimenta feed E detalhe.
         mappedPosts.forEach((p: ApiPost) => {
-          if (p.userInteraction?.hasLiked) likedState[p.id] = true;
+          hydrateLike(p.id, p.userInteraction?.hasLiked === true, p.likes_count ?? 0);
         });
-        setLiked(prev => ({ ...prev, ...likedState }));
 
         if (reset) {
           setPosts(mappedPosts);
@@ -124,7 +163,7 @@ export default function AllPosts({
         setHasMore(data.pagination?.hasNext ?? mappedPosts.length === 20);
       }
     } catch (e) {
-      setError('Falha ao carregar publica��es');
+      setError('Falha ao carregar publicações');
     } finally {
       setIsLoading(false);
     }
@@ -139,50 +178,6 @@ export default function AllPosts({
     const { error } = await postsApi.delete(postId);
     if (!error) {
       setPosts(prev => prev.filter(p => p.id !== postId));
-    }
-  };
-
-  const handleLike = async (postId: string) => {
-    const wasLiked = liked[postId];
-    // Optimistic update
-    setLiked(prev => ({ ...prev, [postId]: !wasLiked }));
-    setPosts(prev => prev.map(p =>
-      p.id === postId
-        ? { ...p, likes_count: (p.likes_count || 0) + (wasLiked ? -1 : 1) }
-        : p
-    ));
-    try {
-      const { data, error } = wasLiked
-        ? await postsApi.unlike(postId)   // DELETE /api/posts/{id}/like/
-        : await postsApi.like(postId);    // POST /api/posts/{id}/like/
-      
-      if (error || !data) {
-        console.error('[AllPosts] Erro ao dar like:', error);
-        // Reverter optimistic update em caso de erro
-        setLiked(prev => ({ ...prev, [postId]: wasLiked }));
-        setPosts(prev => prev.map(p =>
-          p.id === postId
-            ? { ...p, likes_count: (p.likes_count || 0) + (wasLiked ? 1 : -1) }
-            : p
-        ));
-      } else {
-        // Confirmar com valores reais da API
-        setLiked(prev => ({ ...prev, [postId]: data.hasLiked }));
-        setPosts(prev => prev.map(p =>
-          p.id === postId
-            ? { ...p, likes_count: data.likesCount }
-            : p
-        ));
-      }
-    } catch (err) {
-      console.error('[AllPosts] Exce��o ao dar like:', err);
-      // Reverter optimistic update em caso de erro
-      setLiked(prev => ({ ...prev, [postId]: wasLiked }));
-      setPosts(prev => prev.map(p =>
-        p.id === postId
-          ? { ...p, likes_count: (p.likes_count || 0) + (wasLiked ? 1 : -1) }
-          : p
-      ));
     }
   };
 
@@ -246,15 +241,18 @@ export default function AllPosts({
         post={{
           id:             post.id,
           author:         { id: post.author.id || '', name: post.autor.name, avatar: post.author.avatar, type: post.autor.type || '' },
+          title:          selectedPost.title || selectedPost.name || '',
+          category:       selectedPost.category || '',
+          tags:           Array.isArray((selectedPost as any).tags) ? (selectedPost as any).tags : [],
           description:    post.description,
           image:          post.image,
           images:         (selectedPost.images && selectedPost.images.length > 0) ? selectedPost.images : [post.image],
-          likes_count:    post.likes_count,
+          likes_count:    getLike(post.id).likesCount,
           comments_count: (selectedPost as any).comments_count ?? 0,
           shares_count:   (selectedPost as any).shares_count ?? 0,
           saves_count:    (selectedPost as any).saves_count ?? 0,
-          is_liked:       liked[post.id] ?? false,
-          is_saved:       (selectedPost as any).userInteraction?.hasSaved ?? false,
+          is_liked:       getLike(post.id).isLiked,
+          is_saved:       isFavorite(post.id),
           created_at:     (selectedPost as any).created_at || (selectedPost as any).createdAt || '',
           // Localização completa — hierarquia oficial
           province:       post.province,
@@ -267,15 +265,7 @@ export default function AllPosts({
           location:       post.location,
         }}
         onBack={() => setSelectedPost(null)}
-        onLike={(id) => {
-          // Sincroniza o estado da lista quando o like muda no PostDetail
-          setLiked(prev => ({ ...prev, [id]: !prev[id] }));
-          setPosts(prev => prev.map(p =>
-            p.id === id
-              ? { ...p, likes_count: (p.likes_count || 0) + (liked[id] ? -1 : 1) }
-              : p
-          ));
-        }}
+        onLike={() => {}}
         onSave={() => {}}
         onShare={() => {
           const title = post.name;
@@ -373,7 +363,7 @@ export default function AllPosts({
             <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#D1D5DB" strokeWidth="1.5">
               <circle cx="11" cy="11" r="8" /><path d="M21 21l-4.35-4.35" />
             </svg>
-            <p className="text-sm font-bold" style={{ color: '#9CA3AF' }}>Nenhuma publica��o encontrada</p>
+            <p className="text-sm font-bold" style={{ color: '#9CA3AF' }}>Nenhuma publicação encontrada</p>
             <button
               onClick={() => { setSearch(''); setFilter('Todas'); }}
               className="text-xs font-bold"
@@ -402,6 +392,7 @@ export default function AllPosts({
                         src={post.image}
                         alt={post.name}
                         className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                        onError={e => { (e.target as HTMLImageElement).src = PLACEHOLDER_IMAGE; }}
                       />
                       <div className="absolute inset-0" style={{ background: 'linear-gradient(to top, rgba(0,0,0,0.72) 0%, rgba(0,0,0,0.1) 55%, transparent 100%)' }} />
 
@@ -432,7 +423,7 @@ export default function AllPosts({
                                   setShowOptionsMenu(null);
                                   onEditPost?.(post.id);
                                 }}
-                                className="w-full flex items-center gap-2 px-3 py-2 text-sm transition-colors text-left"
+                className="w-full flex items-center gap-2 px-3 py-2 text-sm transition-colors text-left"
                                 style={{ color: isDark ? '#93C5FD' : '#2563EB' }}>
                                 <Edit2 size={14} style={{ color: isDark ? '#93C5FD' : '#2563EB' }} />
                                 <span style={{ color: dm.text }}>Editar</span>
@@ -441,7 +432,7 @@ export default function AllPosts({
                                 onClick={(e) => {
                                   e.stopPropagation();
                                   setShowOptionsMenu(null);
-                                  if (confirm('Tens a certeza de que queres apagar esta publica��o?')) {
+                                  if (confirm('Tens a certeza de que queres apagar esta publicação?')) {
                                     handleDeletePost(post.id);
                                   }
                                 }}
@@ -511,14 +502,20 @@ export default function AllPosts({
                     <div className="px-3 py-2 flex items-center justify-between"
                       style={{ borderTop: `1px solid ${dm.border}` }}>
                       <div className="flex items-center gap-3">
-                        <button onClick={() => handleLike(post.id)} className="flex items-center gap-1">
-                          <IconHeart size={15} fill={liked[post.id] ? '#EF4444' : 'none'}
-                            color={liked[post.id] ? '#EF4444' : dm.text2} strokeWidth={1.8} />
+                        {/* LIKE — polegar para cima (ThumbsUp), estado e contagem do PostsContext */}
+                        <button
+                          onClick={() => toggleLike(post.id)}
+                          disabled={isToggling(post.id)}
+                          className="flex items-center gap-1"
+                          aria-label={getLike(post.id).isLiked ? 'Remover like' : 'Gostar'}
+                        >
+                          <IconThumbsUp size={15} fill={getLike(post.id).isLiked ? '#0EA5E9' : 'none'}
+                            color={getLike(post.id).isLiked ? '#0EA5E9' : dm.text2} strokeWidth={1.8} />
                           <span className="text-xs" style={{ color: dm.text2 }}>
-                            {(post.likes_count ?? 0) + (liked[post.id] && !raw.userInteraction?.hasLiked ? 1 : 0)}
+                            {getLike(post.id).likesCount}
                           </span>
                         </button>
-                        {/* Botão guardar nos favoritos */}
+                        {/* FAVORITO — coração azul, mesma fonte de verdade (FavoritesContext) que Locais/Serviços/Cultura */}
                         <button
                           onClick={e => {
                             e.stopPropagation();
@@ -535,6 +532,7 @@ export default function AllPosts({
                           }}
                           className="flex items-center gap-1"
                           title={isFavorite(post.id) ? 'Remover dos favoritos' : 'Guardar nos favoritos'}
+                          aria-label={isFavorite(post.id) ? 'Remover dos favoritos' : 'Guardar nos favoritos'}
                         >
                           <Heart
                             size={15}
@@ -543,17 +541,13 @@ export default function AllPosts({
                             strokeWidth={1.8}
                           />
                         </button>
-                        <button onClick={() => setSuggested(p => ({ ...p, [post.id]: !p[post.id] }))}
-                          className="flex items-center gap-1">
-                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
-                            stroke={suggested[post.id] ? '#1B5E3B' : dm.text2} strokeWidth="2.2"
-                            strokeLinecap="round" strokeLinejoin="round">
-                            <path d="M22 2L11 13" /><path d="M22 2L15 22 11 13 2 9l20-7z" />
-                          </svg>
-                          <span className="text-xs" style={{ color: suggested[post.id] ? '#1B5E3B' : dm.text2 }}>
-                            {suggested[post.id] ? 'Sugerido' : 'Sugerir'}
-                          </span>
-                        </button>
+                        {/* Sugerir = seguir o perfil do autor — POST /api/users/{id}/follow/ */}
+                        <SuggestButton
+                          authorId={post.author?.id}
+                          initialIsFollowing={(raw as any)?.author?.isFollowing ?? false}
+                          currentUserId={user?.id}
+                          textColor={dm.text2}
+                        />
                       </div>
                       <motion.button whileTap={{ scale: 0.95 }} onClick={() => setSelectedPost(raw)}
                         className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-black border"

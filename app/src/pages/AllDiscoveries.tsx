@@ -8,6 +8,8 @@ import { itemMatchesFilter } from '@/utils/translations';
 import { useFavorites } from '@/context/FavoritesContext';
 import { useScrollTop } from '@/hooks/useScrollTop';
 import { useTheme } from '@/context/ThemeContext';
+import { useSuggest } from '@/hooks/useSuggest';
+import { useAuth } from '@/context/AuthContext';
 
 // ─── Tipos ────────────────────────────────────────────────────────────────────
 
@@ -68,6 +70,32 @@ function resolveFilterLabel(item: Discovery): string {
 
 // ─── Componente ───────────────────────────────────────────────────────────────
 
+// ── SuggestButton — POST/DELETE /api/users/{id}/follow/ (OpenAPI) ────────────
+function SuggestButton({ ownerId, currentUserId }: { ownerId: string | undefined | null; currentUserId?: string | null }) {
+  const { isSuggested, isLoading, isSelf, toggle, errorMessage } = useSuggest(ownerId, false, currentUserId);
+  // Não mostrar o botão ao próprio autor
+  if (isSelf) return null;
+  return (
+    <button
+      className="flex items-center gap-0.5 transition-colors"
+      style={{ color: isSuggested ? '#1B5E3B' : '#9CA3AF' }}
+      onClick={e => { e.stopPropagation(); toggle(); }}
+      disabled={isLoading}
+      title={errorMessage ?? undefined}
+      aria-label={isSuggested ? 'Sugerido' : 'Sugerir perfil do autor'}
+    >
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none"
+        stroke={isSuggested ? '#1B5E3B' : 'currentColor'} strokeWidth="2"
+        style={{ opacity: isLoading ? 0.5 : 1 }}>
+        <path d="M22 2L11 13" /><path d="M22 2L15 22 11 13 2 9l20-7z" />
+      </svg>
+      <span className="text-[9px] font-semibold">
+        {isLoading ? 'Sugerindo…' : isSuggested ? 'Sugerido!' : 'Sugerir'}
+      </span>
+    </button>
+  );
+}
+
 export default function AllDiscoveries({ onBack, onSelectDiscovery }: AllDiscoveriesProps) {
   useScrollTop();
   const { isDark } = useTheme();
@@ -87,7 +115,7 @@ export default function AllDiscoveries({ onBack, onSelectDiscovery }: AllDiscove
   const [page, setPage]               = useState(1);
   const [hasMore, setHasMore]         = useState(true);
   const { isFavorite, toggleFavorite } = useFavorites();
-  const [suggested, setSuggested] = useState<Record<string, boolean>>({});
+  const { user } = useAuth();
 
   const fetchLocals = async (reset = false) => {
     setIsLoading(true);
@@ -103,7 +131,8 @@ export default function AllDiscoveries({ onBack, onSelectDiscovery }: AllDiscove
         setDiscoveries([]);
         setHasMore(false);
       } else {
-        const items: any[] = data.locals || [];
+        // OpenAPI: GET /api/locals/ → data = array direto de LocalList
+        const items: any[] = Array.isArray(data) ? data : (data?.locals ?? data?.results ?? []);
         const mapped = filterValidPublications(items)
           .map(item => mapValidLocal(item))
           .filter((item): item is Discovery => item !== null);
@@ -247,6 +276,21 @@ export default function AllDiscoveries({ onBack, onSelectDiscovery }: AllDiscove
                       onError={e => { (e.target as HTMLImageElement).src = PLACEHOLDER_IMAGE; }} />
                     <div className="absolute inset-0"
                       style={{ background: 'linear-gradient(to top, rgba(0,0,0,0.4) 0%, transparent 50%)' }} />
+
+                    {/* Image count indicator — top right, only when multiple images */}
+                    {item.images && item.images.length > 1 && (
+                      <div className="absolute top-2.5 right-2.5 flex items-center gap-1 px-2 py-1 rounded-full"
+                        style={{ background: 'rgba(0,0,0,0.55)', backdropFilter: 'blur(6px)' }}>
+                        <svg width="10" height="10" viewBox="0 0 24 24" fill="none"
+                          stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <rect x="3" y="3" width="18" height="18" rx="2"/>
+                          <circle cx="8.5" cy="8.5" r="1.5"/>
+                          <polyline points="21 15 16 10 5 21"/>
+                        </svg>
+                        <span className="text-white text-[10px] font-bold">{item.images.length}</span>
+                      </div>
+                    )}
+
                     {/* Rating */}
                     <div className="absolute bottom-3 left-3 flex items-center gap-1 px-2.5 py-1.5 rounded-full"
                       style={{ background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(8px)' }}>
@@ -283,30 +327,8 @@ export default function AllDiscoveries({ onBack, onSelectDiscovery }: AllDiscove
                           style={{ color: isFavorite(item.id) ? '#0EA5E9' : '#9CA3AF' }}>
                           <Heart size={13} fill={isFavorite(item.id) ? 'currentColor' : 'none'} />
                         </button>
-                        <button
-                          className="flex items-center gap-0.5 transition-colors"
-                          style={{ color: suggested[item.id] ? '#1B5E3B' : '#9CA3AF' }}
-                          onClick={async e => {
-                            e.stopPropagation();
-                            const title = item.name;
-                            const text  = `${item.name} — ${item.tag || ''}\nDescobre mais em Txopela Tour!`;
-                            const url   = window.location.origin;
-                            try {
-                              if (navigator.share) await navigator.share({ title, text, url });
-                              else await navigator.clipboard.writeText(`${title}\n${text}\n${url}`);
-                              setSuggested(p => ({ ...p, [item.id]: true }));
-                              setTimeout(() => setSuggested(p => ({ ...p, [item.id]: false })), 2000);
-                            } catch { /* cancelado */ }
-                          }}
-                        >
-                          <svg width="13" height="13" viewBox="0 0 24 24" fill="none"
-                            stroke={suggested[item.id] ? '#1B5E3B' : 'currentColor'} strokeWidth="2">
-                            <path d="M22 2L11 13" /><path d="M22 2L15 22 11 13 2 9l20-7z" />
-                          </svg>
-                          <span className="text-[9px] font-semibold">
-                            {suggested[item.id] ? 'Sugerido!' : 'Sugerir'}
-                          </span>
-                        </button>
+                        {/* Sugerir = seguir o perfil do owner — POST /api/users/{id}/follow/ */}
+                        <SuggestButton ownerId={(item as any).owner?.id} currentUserId={user?.id} />
                       </div>
                       <button className="px-2.5 py-1 rounded-lg text-[9px] font-bold text-white"
                         style={{ background: '#1B5E3B' }}>

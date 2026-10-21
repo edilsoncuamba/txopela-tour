@@ -28,6 +28,7 @@ import {
   Mountain, Accessibility, Theater,
   Phone, Mail, Lightbulb, Info,
   SlidersHorizontal, TrendingUp, Menu,
+  FileText, ThumbsUp,
   // Lucide types
   type LucideProps,
 } from 'lucide-react';
@@ -56,6 +57,7 @@ export { MessageCircle as IconChat };
 export { Share2     as IconShare };
 export { Bookmark   as IconBookmark };
 export { Menu       as IconMenu };
+export { ThumbsUp   as IconThumbsUp };
 
 // Navigation arrows
 export { ChevronLeft  as IconChevronLeft };
@@ -105,14 +107,15 @@ export { Theater    as IconTheater };
 
 // ── Category icons ────────────────────────────────────────────────────────────
 export const CATEGORY_ICONS: Record<string, React.FC<LucideProps>> = {
-  praias:     Waves,
-  cultura:    Landmark,
-  natureza:   Leaf,
-  aventura:   Zap,
-  gastro:     UtensilsCrossed,
-  mergulho:   Anchor,
-  ecoturismo: TreePine,
-  outro:      MoreHorizontal,
+  praias:       Waves,
+  cultura:      Landmark,
+  natureza:     Leaf,
+  aventura:     Zap,
+  gastro:       UtensilsCrossed,
+  mergulho:     Anchor,
+  ecoturismo:   TreePine,
+  publicacoes:  FileText,
+  outro:        MoreHorizontal,
 };
 
 export const CATEGORY_COLORS: Record<string, string> = {
